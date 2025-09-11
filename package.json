@@ -11,7 +11,7 @@
     "start": "nodemon server.js"
   },
   "dependencies": {
-    "@prisma/client": "^6.15.0",
+    "@prisma/client": "^6.16.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
@@ -19,6 +19,6 @@
     "nodemon": "^3.1.10"
   },
   "devDependencies": {
-    "prisma": "^6.15.0"
+    "prisma": "^6.16.0"
   }
 }
