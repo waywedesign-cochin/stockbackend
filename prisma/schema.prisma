@@ -15,22 +15,80 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  username  String
-  email     String   @unique
-  password  String
-  role      Int
-  branchId  String
-  branch    Branch   @relation(fields: [branchId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  username   String
+  email      String   @unique
+  password   String
+  role       Int
+  location   Location @relation(fields: [locationId], references: [id])
+  locationId Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
-model Branch {
-  id        String   @id @default(uuid())
+model Location {
+  id        Int      @id @default(autoincrement())
   name      String   @unique
   address   String?
-  // batches  Batch[]
+  batches   Batch[]
   users     User[]
   createdAt DateTime @default(now())
+}
+
+model Batch {
+  id           Int         @id @default(autoincrement())
+  name         String
+  year         Int
+  location     Location    @relation(fields: [locationId], references: [id])
+  locationId   Int
+  course       Course      @relation(fields: [courseId], references: [id])
+  courseId     Int
+  tutor        String?
+  coordinator  String?
+  slotLimit    Int         @default(30)
+  currentCount Int         @default(0)
+  mode         BatchMode
+  status       BatchStatus @default(PENDING)
+  students     Student[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("batches")
+}
+
+enum BatchMode {
+  ONLINE
+  OFFLINE
+}
+
+enum BatchStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+model Course {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+  baseFee     Float
+  batches     Batch[]
+
+  @@map("courses")
+}
+
+model Student {
+  id              Int     @id @default(autoincrement())
+  admissionNo     String  @unique
+  name            String
+  email           String?
+  phone           String
+  address         String?
+  salesperson     String?
+  isFundedAccount Boolean @default(false)
+  currentBatch    Batch   @relation(fields: [currentBatchId], references: [id])
+  currentBatchId  Int
+
+  @@map("students")
 }
