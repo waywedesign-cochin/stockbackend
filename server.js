@@ -16,5 +16,5 @@ app.use("/api/location", locationRouter);
 app.use("/api/course", courseRouter);
 app.use("/api/student", studentRouter);
 
-const port = 5000;
+const port = process.env.PORT || 3001;
 app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
