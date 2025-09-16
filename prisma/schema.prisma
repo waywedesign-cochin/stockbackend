@@ -20,13 +20,13 @@ model User {
   password   String
   role       Int       @default(1) // 1: staff, 2: director, 3:Admin
   location   Location? @relation(fields: [locationId], references: [id])
-  locationId Int?
+  locationId String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 }
 
 model Location {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   name      String   @unique
   address   String?
   batches   Batch[]
@@ -35,13 +35,13 @@ model Location {
 }
 
 model Batch {
-  id           Int         @id @default(autoincrement())
+  id           String      @id @default(uuid())
   name         String
   year         Int
   location     Location    @relation(fields: [locationId], references: [id])
-  locationId   Int
+  locationId   String
   course       Course      @relation(fields: [courseId], references: [id])
-  courseId     Int
+  courseId     String
   tutor        String?
   coordinator  String?
   slotLimit    Int         @default(30)
@@ -68,7 +68,7 @@ enum BatchStatus {
 }
 
 model Course {
-  id          Int     @id @default(autoincrement())
+  id         String    @id @default(uuid())
   name        String  @unique
   description String
   baseFee     Float
@@ -80,7 +80,7 @@ model Course {
 }
 
 model Student {
-  id              Int     @id @default(autoincrement())
+  id              String     @id @default(uuid())
   admissionNo     String  @unique
   name            String
   email           String?
@@ -89,7 +89,7 @@ model Student {
   salesperson     String?
   isFundedAccount Boolean @default(false)
   currentBatch    Batch   @relation(fields: [currentBatchId], references: [id])
-  currentBatchId  Int
+  currentBatchId  String
 
   @@map("students")
 }
