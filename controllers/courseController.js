@@ -33,7 +33,7 @@ export const updateCourse = TryCatch(async (req, res) => {
   const { id } = req.params;
   const { name, description, baseFee, duration } = req.body;
   const course = await prisma.course.update({
-    where: { id: parseInt(id) },
+    where: { id: id },
     data: {
       name,
       description,
@@ -48,7 +48,7 @@ export const updateCourse = TryCatch(async (req, res) => {
 export const deleteCourse = TryCatch(async (req, res) => {
   const { id } = req.params;
   const course = await prisma.course.delete({
-    where: { id: parseInt(id) },
+    where: { id: id },
   });
   sendResponse(res, 200, true, "Course deleted successfully", null);
 });
