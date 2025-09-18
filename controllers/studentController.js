@@ -24,7 +24,7 @@ export const addStudent = TryCatch(async (req, res) => {
       currentBatchId,
     },
     include: {
-      batches: {
+      currentBatch: {
         select: {
           id: true,
           name: true,
