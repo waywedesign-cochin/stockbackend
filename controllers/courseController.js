@@ -31,7 +31,7 @@ export const getCourses = TryCatch(async (req, res) => {
 //update course
 export const updateCourse = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const { name, description, baseFee, duration } = req.body;
+  const { name, description, baseFee, duration, isActive } = req.body;
   const course = await prisma.course.update({
     where: { id: id },
     data: {
@@ -39,6 +39,7 @@ export const updateCourse = TryCatch(async (req, res) => {
       description,
       baseFee,
       duration,
+      isActive,
     },
   });
   sendResponse(res, 200, true, "Course updated successfully", course);
