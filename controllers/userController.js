@@ -42,3 +42,39 @@ export const login = TryCatch(async (req, res) => {
   );
   sendResponse(res, 200, true, "Login successful", { user, token });
 });
+
+export const getAllUsers = TryCatch(async (req, res) => {
+  const users = await prisma.user.findMany({
+    include: {
+      location: true,
+    },
+  });
+  sendResponse(res, 200, true, "Users fetched successfully", users);
+});
+
+export const getUser = TryCatch(async (req, res) => {
+  const { id } = req.params;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      location: true,
+    },
+  });
+  sendResponse(res, 200, true, "User fetched successfully", user);
+});
+
+export const updateUser = TryCatch(async (req, res) => {
+  const { id } = req.params;
+  const { username, email, password, role, locationId } = req.body;
+  const user = await prisma.user.update({
+    where: { id },
+    data: {
+      username,
+      email,
+      password,
+      role,
+      locationId,
+    },
+  });
+  sendResponse(res, 200, true, "User updated successfully", user);
+});
