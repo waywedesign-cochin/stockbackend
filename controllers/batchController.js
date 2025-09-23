@@ -14,6 +14,7 @@ export const addBatch = TryCatch(async (req, res) => {
     slotLimit,
     currentCount,
     mode,
+    description
   } = req.body;
   const batch = await prisma.batch.create({
     data: {
@@ -26,6 +27,7 @@ export const addBatch = TryCatch(async (req, res) => {
       slotLimit,
       currentCount,
       mode,
+      description
     },
     include: {
       location: true,
@@ -72,6 +74,7 @@ export const updateBatch = TryCatch(async (req, res) => {
     slotLimit,
     currentCount,
     mode,
+    description
   } = req.body;
   const batch = await prisma.batch.update({
     where: { id },
@@ -85,6 +88,7 @@ export const updateBatch = TryCatch(async (req, res) => {
       slotLimit,
       currentCount,
       mode,
+      description
     },
   });
   sendResponse(res, 200, true, "Batch updated successfully", batch);
