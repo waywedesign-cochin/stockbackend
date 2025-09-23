@@ -1,18 +1,18 @@
-import { sendResponse } from "../utils/responseHandler";
+import jwt from "jsonwebtoken";
+import { sendResponse } from "../utils/responseHandler.js";
 
 export const jwtMiddleware = (req, res, next) => {
-  const { authorization } = req.headers;
-  if (authorization) {
-    const token = authorization.split(" ")[1];
+  const token = req.cookies?.token;
 
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      req.user = decoded;
-      next();
-    } catch (error) {
-      sendResponse(res, 401, false, "Unauthorized: Invalid token", null);
-    }
-  } else {
-    sendResponse(res, 401, false, "Unauthorized: No token provided", null);
+  if (!token) {
+    return sendResponse(res, 401, false, "Unauthorized: No token provided", null);
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    sendResponse(res, 401, false, "Unauthorized: Invalid token", null);
   }
 };

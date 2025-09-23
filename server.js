@@ -5,12 +5,14 @@ import batchRouter from "./routes/batch.js";
 import locationRouter from "./routes/location.js";
 import courseRouter from "./routes/course.js";
 import studentRouter from "./routes/student.js";
+import cookieParser from "cookie-parser";
 const app = express();
 
 app.use(express.json());
+app.use(cookieParser())
 app.use(
   cors({
-    origin: "*",
+    origin: "http://localhost:3000",
     credentials: true,
   })
 );

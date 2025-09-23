@@ -5,7 +5,10 @@ import {
   getAllUsers,
   getUser,
   updateUser,
+  logout,
+  getCurrentUser,
 } from "../controllers/userController.js";
+import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 
 const router = express.Router();
 
@@ -14,6 +17,12 @@ router.post("/signup", signUp);
 
 //login
 router.post("/login", login);
+
+//logout
+router.post("/logout", logout);
+
+//currentuser
+router.get("/me",jwtMiddleware, getCurrentUser);
 
 //get all users
 router.get("/get-users", getAllUsers);
