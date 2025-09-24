@@ -25,22 +25,54 @@ export const signUp = TryCatch(async (req, res) => {
 
 export const login = TryCatch(async (req, res) => {
   const { email, password } = req.body;
-  const user = await prisma.user.findUnique({
-    where: { email },
-  });
+
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
     return sendResponse(res, 400, false, "Invalid email or password", null);
   }
+
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     return sendResponse(res, 400, false, "Invalid email or password", null);
   }
+
   const token = jwt.sign(
     { id: user.id, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
-  sendResponse(res, 200, true, "Login successful", { user, token });
+
+  // Send token in HTTP-only cookie
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 24 * 60 * 60 * 1000, // 1 day
+  });
+  sendResponse(res, 200, true, "Login successful", user);
+});
+
+export const logout = (req, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+  sendResponse(res, 200, true, "Logged out successfully", null);
+};
+
+// Get currently logged-in user
+export const getCurrentUser = TryCatch(async (req, res) => {
+  if (!req.user) {
+    return sendResponse(res, 401, false, "Not authenticated", null);
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { id: req.user.id },
+    include: { location: true }, // include relations if needed
+  });
+
+  sendResponse(res, 200, true, "User fetched successfully", user);
 });
 
 export const getAllUsers = TryCatch(async (req, res) => {
