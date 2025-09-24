@@ -32,6 +32,9 @@ model Location {
   batches   Batch[]
   users     User[]
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("locations")
 }
 
 model Batch {
@@ -69,28 +72,32 @@ enum BatchStatus {
 }
 
 model Course {
-  id         String    @id @default(uuid())
+  id          String  @id @default(uuid())
   name        String  @unique
   description String
   baseFee     Float
   duration    String
   batches     Batch[]
   isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("courses")
 }
 
 model Student {
-  id              String     @id @default(uuid())
-  admissionNo     String  @unique
+  id              String   @id @default(uuid())
+  admissionNo     String   @unique
   name            String
   email           String?
   phone           String
   address         String?
   salesperson     String?
-  isFundedAccount Boolean @default(false)
-  currentBatch    Batch   @relation(fields: [currentBatchId], references: [id])
+  isFundedAccount Boolean  @default(false)
+  currentBatch    Batch    @relation(fields: [currentBatchId], references: [id])
   currentBatchId  String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@map("students")
 }
