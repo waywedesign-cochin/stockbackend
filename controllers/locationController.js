@@ -25,6 +25,9 @@ export const getLocations = TryCatch(async (req, res) => {
       batches: true,
       users: true,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
   sendResponse(res, 200, true, "Locations fetched successfully", locations);
 });
