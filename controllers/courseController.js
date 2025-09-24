@@ -24,6 +24,9 @@ export const getCourses = TryCatch(async (req, res) => {
     include: {
       batches: true,
     },
+    orderBy: {
+      createdAt: "desc",
+    },
   });
   sendResponse(res, 200, true, "Courses fetched successfully", courses);
 });
