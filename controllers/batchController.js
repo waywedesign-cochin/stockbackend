@@ -49,7 +49,7 @@ export const getBatches = TryCatch(async (req, res) => {
   //batch by id
   if (id) {
     const batch = await prisma.batch.findUnique({
-      where: { id: id },
+      where: { id },
       include: {
         location: true,
         course: true,
@@ -67,24 +67,30 @@ export const getBatches = TryCatch(async (req, res) => {
         },
       },
     });
-    sendResponse(res, 200, true, "Batch fetched successfully", batch);
+    if (!batch) {
+      return sendResponse(res, 404, false, "Batch not found", null);
+    }
+    return sendResponse(res, 200, true, "Batch fetched successfully", batch);
   }
-  const where = {
-    location: { name: { contains: location ? location : undefined } },
-    course: { name: { contains: course ? course : undefined } },
-    status: status ? status : undefined,
-    mode: mode ? mode : undefined,
-    OR: search
-      ? [
-          { name: { contains: search, mode: "insensitive" } },
-          { tutor: { contains: search, mode: "insensitive" } },
-          { coordinator: { contains: search, mode: "insensitive" } },
-          { course: { name: { contains: search, mode: "insensitive" } } },
-          { year: { equals: parseInt(search) || undefined } },
-          { location: { name: { contains: search, mode: "insensitive" } } },
-        ]
-      : undefined,
-  };
+  //filters
+  const where = {};
+  if (location)
+    where.location = { name: { contains: location, mode: "insensitive" } };
+  if (course)
+    where.course = { name: { contains: course, mode: "insensitive" } };
+  if (status) where.status = status;
+  if (mode) where.mode = mode;
+
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { tutor: { contains: search, mode: "insensitive" } },
+      { coordinator: { contains: search, mode: "insensitive" } },
+      { course: { name: { contains: search, mode: "insensitive" } } },
+      { year: { equals: parseInt(search) || undefined } },
+      { location: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
 
   const totalCount = await prisma.batch.count({ where });
   const totalPages = Math.ceil(totalCount / limit);

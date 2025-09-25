@@ -38,18 +38,81 @@ export const addStudent = TryCatch(async (req, res) => {
 
 //get student
 export const getStudents = TryCatch(async (req, res) => {
-  const students = await prisma.student.findMany({
-    include: {
-      currentBatch: {
-        select: {
-          id: true,
-          name: true,
-          year: true,
+  const { id, search, isFundedAccount } = req.query;
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // Fetch by ID
+  if (id) {
+    const student = await prisma.student.findUnique({
+      where: { id },
+      include: {
+        currentBatch: {
+          select: { id: true, name: true, year: true },
         },
       },
+    });
+
+    if (!student) {
+      return sendResponse(res, 404, false, "Student not found", null);
+    }
+
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Student fetched successfully",
+      student
+    );
+  }
+
+  //filters
+  const where = {};
+
+  if (isFundedAccount !== undefined) {
+    where.isFundedAccount = isFundedAccount === "true";
+  }
+
+  if (search) {
+    where.OR = [
+      { admissionNo: { contains: search, mode: "insensitive" } },
+      { name: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
+      { phone: { contains: search, mode: "insensitive" } },
+      { address: { contains: search, mode: "insensitive" } },
+      { salesperson: { contains: search, mode: "insensitive" } },
+      { currentBatch: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
+  //Total count for pagination
+  const totalCount = await prisma.student.count({ where });
+  const totalPages = Math.ceil(totalCount / limit);
+
+  const students = await prisma.student.findMany({
+    where,
+    include: {
+      currentBatch: {
+        select: { id: true, name: true, year: true },
+      },
+    },
+    skip,
+    take: limit,
+    orderBy: { createdAt: "desc" },
+  });
+
+  // Send response
+  return sendResponse(res, 200, true, "Students fetched successfully", {
+    students,
+    pagination: {
+      currentPage: page,
+      limit,
+      totalCount,
+      totalPages,
     },
   });
-  sendResponse(res, 200, true, "Students fetched successfully", students);
 });
 
 //update student
