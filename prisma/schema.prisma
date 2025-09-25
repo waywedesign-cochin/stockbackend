@@ -41,6 +41,7 @@ model Batch {
   id           String      @id @default(uuid())
   name         String
   year         Int
+  startDate    DateTime?
   location     Location    @relation(fields: [locationId], references: [id])
   locationId   String
   course       Course      @relation(fields: [courseId], references: [id])
