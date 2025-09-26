@@ -7,6 +7,7 @@ export const addBatch = TryCatch(async (req, res) => {
   const {
     name,
     year,
+    startDate,
     locationId,
     courseId,
     tutor,
@@ -20,6 +21,7 @@ export const addBatch = TryCatch(async (req, res) => {
     data: {
       name,
       year,
+      startDate: new Date(startDate),
       locationId,
       courseId,
       tutor,
@@ -136,6 +138,7 @@ export const updateBatch = TryCatch(async (req, res) => {
   const {
     name,
     year,
+    startDate,
     locationId,
     courseId,
     tutor,
@@ -150,6 +153,7 @@ export const updateBatch = TryCatch(async (req, res) => {
     data: {
       name,
       year,
+      startDate: new Date(startDate),
       locationId,
       courseId,
       tutor,
