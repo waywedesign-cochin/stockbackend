@@ -146,6 +146,7 @@ export const updateBatch = TryCatch(async (req, res) => {
     slotLimit,
     currentCount,
     mode,
+    status,
     description,
   } = req.body;
   const batch = await prisma.batch.update({
@@ -161,6 +162,7 @@ export const updateBatch = TryCatch(async (req, res) => {
       slotLimit,
       currentCount,
       mode,
+      status,
       description,
     },
   });
