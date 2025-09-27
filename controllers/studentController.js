@@ -11,6 +11,7 @@ export const addStudent = TryCatch(async (req, res) => {
     phone,
     address,
     salesperson,
+    isFundedAccount,
     currentBatchId,
   } = req.body;
   const student = await prisma.student.create({
@@ -21,6 +22,7 @@ export const addStudent = TryCatch(async (req, res) => {
       phone,
       address,
       salesperson,
+      isFundedAccount,
       currentBatchId,
     },
     include: {
@@ -95,7 +97,7 @@ export const getStudents = TryCatch(async (req, res) => {
     where,
     include: {
       currentBatch: {
-        select: { id: true, name: true, year: true },
+        select: { id: true, name: true, year: true, mode: true, course: true },
       },
     },
     skip,
@@ -125,6 +127,7 @@ export const updateStudent = TryCatch(async (req, res) => {
     phone,
     address,
     salesperson,
+    isFundedAccount,
     currentBatchId,
   } = req.body;
   const student = await prisma.student.update({
@@ -136,6 +139,7 @@ export const updateStudent = TryCatch(async (req, res) => {
       phone,
       address,
       salesperson,
+      isFundedAccount,
       currentBatchId,
     },
     include: {
@@ -143,6 +147,8 @@ export const updateStudent = TryCatch(async (req, res) => {
         select: {
           id: true,
           name: true,
+          course: true,
+          mode: true,
           year: true,
         },
       },
