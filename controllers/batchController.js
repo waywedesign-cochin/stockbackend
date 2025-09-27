@@ -101,7 +101,14 @@ export const getBatches = TryCatch(async (req, res) => {
     where,
     include: {
       location: true,
-      course: true,
+      course: {
+        select: {
+          id: true,
+          name: true,
+          baseFee: true,
+          duration: true,
+        }
+      },
       students: {
         select: {
           admissionNo: true,
