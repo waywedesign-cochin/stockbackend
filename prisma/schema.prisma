@@ -33,7 +33,7 @@ model Location {
   users     User[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@map("locations")
 }
 
@@ -73,13 +73,13 @@ enum BatchStatus {
 }
 
 model Course {
-  id          String  @id @default(uuid())
-  name        String  @unique
+  id          String   @id @default(uuid())
+  name        String   @unique
   description String
   baseFee     Float
   duration    String
   batches     Batch[]
-  isActive    Boolean @default(true)
+  isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

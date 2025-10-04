@@ -31,10 +31,22 @@ export const addStudent = TryCatch(async (req, res) => {
           id: true,
           name: true,
           year: true,
+          status: true,
+          mode: true,
+          tutor: true,
+          coordinator: true,
+          location: true,
+          course: true,
         },
       },
     },
   });
+  if (student) {
+    const incrementCount = await prisma.batch.update({
+      where: { id: student.currentBatchId },
+      data: { currentCount: { increment: 1 } },
+    });
+  }
   sendResponse(res, 200, true, "Student added successfully", student);
 });
 
@@ -52,7 +64,17 @@ export const getStudents = TryCatch(async (req, res) => {
       where: { id },
       include: {
         currentBatch: {
-          select: { id: true, name: true, year: true },
+          select: {
+            id: true,
+            name: true,
+            year: true,
+            status: true,
+            mode: true,
+            tutor: true,
+            coordinator: true,
+            location: true,
+            course: true,
+          },
         },
       },
     });
@@ -97,7 +119,17 @@ export const getStudents = TryCatch(async (req, res) => {
     where,
     include: {
       currentBatch: {
-        select: { id: true, name: true, year: true, mode: true, course: true },
+        select: {
+          id: true,
+          name: true,
+          year: true,
+          status: true,
+          mode: true,
+          tutor: true,
+          coordinator: true,
+          location: true,
+          course: true,
+        },
       },
     },
     skip,
@@ -147,9 +179,13 @@ export const updateStudent = TryCatch(async (req, res) => {
         select: {
           id: true,
           name: true,
-          course: true,
-          mode: true,
           year: true,
+          status: true,
+          mode: true,
+          tutor: true,
+          coordinator: true,
+          location: true,
+          course: true,
         },
       },
     },
@@ -163,5 +199,11 @@ export const deleteStudent = TryCatch(async (req, res) => {
   const student = await prisma.student.delete({
     where: { id: id },
   });
+  if (student) {
+    const decrementCount = await prisma.batch.update({
+      where: { id: student.currentBatchId },
+      data: { currentCount: { decrement: 1 } },
+    });
+  }
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
