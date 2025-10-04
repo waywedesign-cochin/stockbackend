@@ -77,7 +77,7 @@ model Course {
   name        String   @unique
   description String
   baseFee     Float
-  duration    String
+  duration    Int
   batches     Batch[]
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
