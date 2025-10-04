@@ -47,8 +47,10 @@ export const login = TryCatch(async (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
   });
+  
   sendResponse(res, 200, true, "Login successful", user);
 });
 
