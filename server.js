@@ -17,30 +17,21 @@ import studentRouter from "./routes/student.js";
 const app = express();
 
 // Parse JSON requests
-
 app.use(express.json());
 
 // Parse cookies
-
 app.use(cookieParser());
 
 // CORS setup (local + production)
 const allowedOrigins = [
-  "http://localhost:3000", // local frontend
-  "https://stockfrontend-beryl.vercel.app", // production frontend
+  "http://localhost:3000",
+  "https://stockfrontend-beryl.vercel.app",
 ];
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (same-origin/proxied requests)
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
+    origin: allowedOrigins,
+    credentials: true, // 🔥 allows cookies
   })
 );
 
@@ -55,8 +46,6 @@ app.use("/api/location", locationRouter);
 app.use("/api/course", courseRouter);
 
 app.use("/api/student", studentRouter);
-
-// Start server
 
 const port = process.env.PORT || 3001;
 
