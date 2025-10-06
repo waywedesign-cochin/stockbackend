@@ -45,10 +45,10 @@ export const login = TryCatch(async (req, res) => {
   // Send token in HTTP-only cookie
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true, // always true on Vercel (HTTPS)
-    sameSite: "none", // required for cross-site cookies
-    path: "/",
-    maxAge: 24 * 60 * 60 * 1000, // 1 day
+    secure: true, // ✅ must be true on Vercel
+    sameSite: "none", // ✅ cross-site cookie
+    path: "/", // ✅ send to all backend routes
+    maxAge: 24 * 60 * 60 * 1000,
   });
 
   sendResponse(res, 200, true, "Login successful", user);
@@ -67,7 +67,7 @@ export const logout = (req, res) => {
 // Get currently logged-in user
 export const getCurrentUser = TryCatch(async (req, res) => {
   console.log(req);
-  
+
   if (!req.user) {
     return sendResponse(res, 401, false, "Not authenticated", null);
   }
