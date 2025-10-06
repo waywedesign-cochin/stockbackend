@@ -25,7 +25,6 @@ app.use(express.json());
 app.use(cookieParser());
 
 // CORS setup (local + production)
-
 const allowedOrigins = [
   "http://localhost:3000", // local frontend
   "https://stockfrontend-beryl.vercel.app", // production frontend
