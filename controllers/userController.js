@@ -45,12 +45,12 @@ export const login = TryCatch(async (req, res) => {
   // Send token in HTTP-only cookie
   res.cookie("token", token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    secure: true, // Always true in production
+    sameSite: "lax", // Changed from "none" to "lax"
     path: "/",
     maxAge: 24 * 60 * 60 * 1000,
   });
-  
+
   sendResponse(res, 200, true, "Login successful", user);
 });
 
