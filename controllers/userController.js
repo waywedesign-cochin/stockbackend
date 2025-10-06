@@ -45,9 +45,10 @@ export const login = TryCatch(async (req, res) => {
   // Send token in HTTP-only cookie
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true, // ✅ must be true on Vercel
-    sameSite: "none", // ✅ cross-site cookie
-    path: "/", // ✅ send to all backend routes
+    secure: true,
+    sameSite: "none",
+    path: "/",
+    domain: "stockbackend-eight.vercel.app", // 🔥 set backend domain
     maxAge: 24 * 60 * 60 * 1000,
   });
 
