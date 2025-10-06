@@ -87,18 +87,60 @@ model Course {
 }
 
 model Student {
-  id              String   @id @default(uuid())
-  admissionNo     String   @unique
+  id              String  @id @default(uuid())
+  admissionNo     String  @unique
   name            String
   email           String?
   phone           String
   address         String?
   salesperson     String?
-  isFundedAccount Boolean  @default(false)
-  currentBatch    Batch    @relation(fields: [currentBatchId], references: [id])
-  currentBatchId  String
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isFundedAccount Boolean @default(false)
+
+  currentBatch   Batch  @relation(fields: [currentBatchId], references: [id])
+  currentBatchId String
+
+  fees     Fee[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("students")
+}
+
+model Fee {
+  id             String    @id @default(uuid())
+  totalCourseFee Int
+  finalFee       Int?
+  discountAmount Int?      @default(0)
+  balanceAmount  Int
+  feePaymentMode String?
+  student        Student   @relation(fields: [studentId], references: [id])
+  studentId      String
+  payments       Payment[] 
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@map("fees")
+}
+
+model Payment {
+  id            String    @id @default(uuid())
+  amount        Int
+  mode          String
+  paidAt        DateTime
+  dueDate       DateTime? 
+  transactionId String?
+  note          String?
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+  fee       Fee     @relation(fields: [feeId], references: [id])
+  feeId     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payments")
 }
