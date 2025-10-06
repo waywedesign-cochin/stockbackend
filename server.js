@@ -24,14 +24,14 @@ app.use(cookieParser());
 
 // CORS setup (local + production)
 const allowedOrigins = [
-  "http://localhost:3000",
   "https://stockfrontend-beryl.vercel.app",
+  "http://localhost:3000",
 ];
 
 app.use(
   cors({
     origin: allowedOrigins,
-    credentials: true, // 🔥 allows cookies
+    credentials: true, // ✅ allow cookies
   })
 );
 
