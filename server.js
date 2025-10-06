@@ -28,23 +28,20 @@ app.use(cookieParser());
 
 const allowedOrigins = [
   "http://localhost:3000", // local frontend
-
-  process.env.FRONTEND_URL || "https://stockfrontend-beryl.vercel.app", // production
+  "https://stockfrontend-beryl.vercel.app", // production frontend
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like Postman) or allowed origins
-
+      // Allow requests with no origin (same-origin/proxied requests)
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
       }
     },
-
-    credentials: true, // <-- important to send cookies
+    credentials: true,
   })
 );
 
