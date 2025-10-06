@@ -42,28 +42,8 @@ export const login = TryCatch(async (req, res) => {
     { expiresIn: "1d" }
   );
 
-  // Send token in HTTP-only cookie
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-    domain: "stockbackend-eight.vercel.app", // 🔥 set backend domain
-    maxAge: 24 * 60 * 60 * 1000,
-  });
-
-  sendResponse(res, 200, true, "Login successful", user);
+  sendResponse(res, 200, true, "Login successful", { user, token });
 });
-
-export const logout = (req, res) => {
-  res.clearCookie("token", {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-  });
-  sendResponse(res, 200, true, "Logged out successfully", null);
-};
 
 // Get currently logged-in user
 export const getCurrentUser = TryCatch(async (req, res) => {
