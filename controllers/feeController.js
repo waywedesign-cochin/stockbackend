@@ -6,6 +6,13 @@ export const getFees = TryCatch(async (req, res) => {
   const { studentId } = req.params;
   const fees = await prisma.fee.findMany({
     where: { studentId },
+    include: {
+      student: {
+        include: {
+          currentBatch: true,
+        },
+      },
+    },
   });
   sendResponse(res, 200, true, "Fees fetched successfully", fees);
 });
@@ -13,20 +20,36 @@ export const getFees = TryCatch(async (req, res) => {
 //update fee
 export const updateFee = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const { discountAmount = 0, feePaymentMode } = req.body;
+  const { discountAmount, feePaymentMode } = req.body;
+
   const existingFee = await prisma.fee.findUnique({
     where: { id },
+    include: {
+      student: {
+        include: {
+          currentBatch: true,
+        },
+      },
+    },
   });
+
   if (!existingFee) {
     return sendResponse(res, 404, false, "Fee not found", null);
   }
-  const updatedFinalFee = existingFee.finalFee - discountAmount;
+
+  // Calculate finalDiscount
+  const finalDiscount =
+    discountAmount !== undefined ? discountAmount : existingFee.discountAmount;
+
+  // Update finalFee and balanceAmount based on discount
+  const updatedFinalFee = (existingFee.totalCourseFee || 0) - finalDiscount;
   const updatedBalance = feePaymentMode === "fullPayment" ? 0 : updatedFinalFee;
 
+  //Update Fee
   const fee = await prisma.fee.update({
     where: { id },
     data: {
-      discountAmount,
+      discountAmount: finalDiscount,
       finalFee: updatedFinalFee,
       balanceAmount: updatedBalance,
       feePaymentMode,
@@ -34,5 +57,67 @@ export const updateFee = TryCatch(async (req, res) => {
     },
   });
 
-  sendResponse(res, 200, true, "Fee updated successfully", fee);
+  // 1️⃣ Delete Scheduled Payments
+  await prisma.payment.deleteMany({
+    where: {
+      feeId: id,
+      paidAt: null,
+      dueDate: { not: null },
+    },
+  });
+
+  // 2️⃣ Scheduled Payments: Only for weekly or 70/30
+  const scheduledPayments = [];
+  const batchStartDate = existingFee.student.currentBatch.startDate;
+
+  if (feePaymentMode === "weekly") {
+    const weeks = 4;
+    const perWeek = Math.floor(updatedBalance / weeks);
+
+    for (let i = 0; i < weeks; i++) {
+      const dueDate = new Date(batchStartDate);
+      dueDate.setDate(dueDate.getDate() + 7 * i);
+      scheduledPayments.push({
+        amount: perWeek,
+        dueDate,
+        studentId: existingFee.studentId,
+        feeId: id,
+      });
+    }
+  } else if (feePaymentMode === "70/30") {
+    const first = Math.round(updatedBalance * 0.7);
+    const second = updatedBalance - first;
+
+    const firstDue = new Date(batchStartDate);
+    const secondDue = new Date(batchStartDate);
+    secondDue.setDate(secondDue.getDate() + 30);
+
+    scheduledPayments.push(
+      {
+        amount: first,
+        dueDate: firstDue,
+        studentId: existingFee.studentId,
+        feeId: id,
+      },
+      {
+        amount: second,
+        dueDate: secondDue,
+        studentId: existingFee.studentId,
+        feeId: id,
+      }
+    );
+  }
+
+  // scheduled payments
+  if (scheduledPayments.length > 0) {
+    await prisma.payment.createMany({ data: scheduledPayments });
+  }
+
+  sendResponse(
+    res,
+    200,
+    true,
+    "Fee updated successfully with discount and due dates",
+    fee
+  );
 });
