@@ -14,6 +14,8 @@ export const addStudent = TryCatch(async (req, res) => {
     isFundedAccount,
     currentBatchId,
   } = req.body;
+
+  // 1️⃣ Create Student
   const student = await prisma.student.create({
     data: {
       admissionNo,
@@ -41,13 +43,36 @@ export const addStudent = TryCatch(async (req, res) => {
       },
     },
   });
-  if (student) {
-    const incrementCount = await prisma.batch.update({
-      where: { id: student.currentBatchId },
-      data: { currentCount: { increment: 1 } },
-    });
+
+  if (!student) {
+    return sendResponse(res, 500, false, "Failed to add student", null);
   }
-  sendResponse(res, 200, true, "Student added successfully", student);
+
+  //Increment current batch count
+  await prisma.batch.update({
+    where: { id: student.currentBatchId },
+    data: { currentCount: { increment: 1 } },
+  });
+
+  //Create Fee for this student
+
+  const baseFee = student.currentBatch.course?.baseFee || 0;
+
+  const fee = await prisma.fee.create({
+    data: {
+      totalCourseFee: baseFee,
+      finalFee: baseFee,
+      discountAmount: 0,
+      balanceAmount: baseFee,
+      feePaymentMode: null,
+      studentId: student.id,
+    },
+  });
+
+  sendResponse(res, 200, true, "Student added successfully with fee", {
+    student,
+    fee,
+  });
 });
 
 //get student
@@ -72,8 +97,33 @@ export const getStudents = TryCatch(async (req, res) => {
             mode: true,
             tutor: true,
             coordinator: true,
-            location: true,
-            course: true,
+            location: {
+              select: {
+                id: true,
+                name: true,
+                address: true,
+              },
+            },
+            course: {
+              select: {
+                id: true,
+                name: true,
+                baseFee: true,
+                duration: true,
+                isActive: true,
+              },
+            },
+          },
+        },
+        fees: {
+          select: {
+            id: true,
+            totalCourseFee: true,
+            finalFee: true,
+            discountAmount: true,
+            balanceAmount: true,
+            feePaymentMode: true,
+            status: true,
           },
         },
       },
@@ -127,8 +177,33 @@ export const getStudents = TryCatch(async (req, res) => {
           mode: true,
           tutor: true,
           coordinator: true,
-          location: true,
-          course: true,
+          location: {
+            select: {
+              id: true,
+              name: true,
+              address: true,
+            },
+          },
+          course: {
+            select: {
+              id: true,
+              name: true,
+              baseFee: true,
+              duration: true,
+              isActive: true,
+            },
+          },
+        },
+      },
+      fees: {
+        select: {
+          id: true,
+          totalCourseFee: true,
+          finalFee: true,
+          discountAmount: true,
+          balanceAmount: true,
+          feePaymentMode: true,
+          status: true,
         },
       },
     },
