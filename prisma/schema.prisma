@@ -117,7 +117,7 @@ model Fee {
   feePaymentMode String?
   student        Student   @relation(fields: [studentId], references: [id])
   studentId      String
-  payments       Payment[] 
+  payments       Payment[]
   status         String    @default("PENDING")
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -128,17 +128,16 @@ model Fee {
 model Payment {
   id            String    @id @default(uuid())
   amount        Int
-  mode          String
-  paidAt        DateTime
-  dueDate       DateTime? 
+  mode          String?
+  paidAt        DateTime?
+  dueDate       DateTime?
   transactionId String?
   note          String?
-
-  student   Student @relation(fields: [studentId], references: [id])
-  studentId String
-  fee       Fee     @relation(fields: [feeId], references: [id])
-  feeId     String
-
+  status        String    @default("PENDING")
+  student       Student   @relation(fields: [studentId], references: [id])
+  studentId     String
+  fee           Fee       @relation(fields: [feeId], references: [id])
+  feeId         String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
