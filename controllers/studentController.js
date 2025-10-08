@@ -75,15 +75,16 @@ export const addStudent = TryCatch(async (req, res) => {
   });
 });
 
-//get student
+//get student by filters
 export const getStudents = TryCatch(async (req, res) => {
-  const { id, search, isFundedAccount } = req.query;
+  const { id, search, isFundedAccount, location, batch, mode, status } =
+    req.query;
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  // Fetch by ID
+  // single student by ID
   if (id) {
     const student = await prisma.student.findUnique({
       where: { id },
@@ -143,11 +144,35 @@ export const getStudents = TryCatch(async (req, res) => {
     );
   }
 
-  //filters
+  // filters
   const where = {};
 
   if (isFundedAccount !== undefined) {
     where.isFundedAccount = isFundedAccount === "true";
+  }
+
+  // Combine Batch, Location, Mode filters (default + selected)
+  if (batch || location || mode || status) {
+    where.currentBatch = {
+      AND: [
+        batch && {
+          OR: [
+            { id: batch },
+            { name: { contains: batch, mode: "insensitive" } },
+          ],
+        },
+        location && {
+          location: {
+            OR: [
+              { id: location },
+              { name: { contains: location, mode: "insensitive" } },
+            ],
+          },
+        },
+        mode && { mode },
+        status && { status },
+      ].filter(Boolean),
+    };
   }
 
   if (search) {
@@ -158,11 +183,10 @@ export const getStudents = TryCatch(async (req, res) => {
       { phone: { contains: search, mode: "insensitive" } },
       { address: { contains: search, mode: "insensitive" } },
       { salesperson: { contains: search, mode: "insensitive" } },
-      { currentBatch: { name: { contains: search, mode: "insensitive" } } },
     ];
   }
 
-  //Total count for pagination
+  // count total for pagination
   const totalCount = await prisma.student.count({ where });
   const totalPages = Math.ceil(totalCount / limit);
 
@@ -225,7 +249,6 @@ export const getStudents = TryCatch(async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
 
-  // Send response
   return sendResponse(res, 200, true, "Students fetched successfully", {
     students,
     pagination: {
