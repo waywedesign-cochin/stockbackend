@@ -113,7 +113,8 @@ model Fee {
   totalCourseFee Int
   finalFee       Int?
   discountAmount Int?      @default(0)
-  balanceAmount  Int
+  advanceAmount  Int?
+  balanceAmount  Int?
   feePaymentMode String?
   student        Student   @relation(fields: [studentId], references: [id])
   studentId      String

@@ -63,9 +63,9 @@ export const addStudent = TryCatch(async (req, res) => {
       totalCourseFee: baseFee,
       finalFee: baseFee,
       discountAmount: 0,
-      balanceAmount: baseFee,
+      balanceAmount: null,
       feePaymentMode: null,
-      studentId: student.id,
+      studentId: student?.id,
     },
   });
 
@@ -77,7 +77,7 @@ export const addStudent = TryCatch(async (req, res) => {
 
 //get student by filters
 export const getStudents = TryCatch(async (req, res) => {
-  const { id, search, isFundedAccount, location, batch, mode, status } =
+  const { id, search, isFundedAccount, location, batch, mode, status, course } =
     req.query;
 
   const page = parseInt(req.query.page) || 1;
@@ -166,6 +166,14 @@ export const getStudents = TryCatch(async (req, res) => {
             OR: [
               { id: location },
               { name: { contains: location, mode: "insensitive" } },
+            ],
+          },
+        },
+        course && {
+          course: {
+            OR: [
+              { id: course },
+              { name: { contains: course, mode: "insensitive" } },
             ],
           },
         },
