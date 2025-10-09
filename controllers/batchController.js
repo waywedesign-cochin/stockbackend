@@ -76,8 +76,13 @@ export const getBatches = TryCatch(async (req, res) => {
   }
   //filters
   const where = {};
-  if (location)
-    where.location = { name: { contains: location, mode: "insensitive" } };
+  if (location) {
+    where.OR = [
+      { location: { name: { contains: location, mode: "insensitive" } } },
+      { locationId: location },
+    ];
+  }
+
   if (course)
     where.course = { name: { contains: course, mode: "insensitive" } };
   if (status) where.status = status;
@@ -107,7 +112,7 @@ export const getBatches = TryCatch(async (req, res) => {
           name: true,
           baseFee: true,
           duration: true,
-        }
+        },
       },
       students: {
         select: {
