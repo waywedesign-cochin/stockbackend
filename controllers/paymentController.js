@@ -5,14 +5,19 @@ import e from "express";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
-  const { feeId, amount, mode, transactionId, note, isAdvance } = req.body;
+  const { feeId, amount, mode, transactionId, note, paidAt, isAdvance } =
+    req.body;
 
   const existingFee = await prisma.fee.findUnique({
     where: { id: feeId },
     include: {
       student: {
         include: {
-          currentBatch: true,
+          currentBatch: {
+            include: {
+              course: true,
+            },
+          },
         },
       },
     },
@@ -30,36 +35,77 @@ export const createPayment = TryCatch(async (req, res) => {
     const batchStartDate = existingFee.student.currentBatch.startDate;
 
     if (existingFee.feePaymentMode === "weekly") {
-      const weeks = 4;
-      const perWeek = Math.floor(updatedBalance / weeks);
+      const batchStart = new Date(batchStartDate);
+      const courseName =
+        existingFee.student.currentBatch.course.name.toUpperCase();
 
-      for (let i = 0; i < weeks; i++) {
-        const dueDate = new Date(batchStartDate);
-        dueDate.setDate(dueDate.getDate() + 7 * i);
+      // Define installment mapping for all courses
+      const installmentMap = {
+        "STOCK OFFLINE": [5000, 10000, 10000, 5400],
+        "FOREX OFFLINE": [5000, 10000, 10000, 5400],
+        "STOCK ONLINE": [5000, 5000, 5000, 5000],
+        "FOREX ONLINE": [5000, 5000, 5000, 5000],
+        "STOCK AND FOREX COMBINED (ONLINE)": [16000, 8000, 8000, 7600],
+        "STOCK AND FOREX COMBINED (OFFLINE)": [
+          20500, 10500, 10500, 10500, 10800,
+        ],
+        "STOCK AND FOREX COMBINED (ONLINE+OFFLINE)": [
+          18200, 11000, 11000, 11000,
+        ],
+        // Add more combinations if needed
+      };
+
+      const perWeek = installmentMap[courseName] || [
+        existingFee.balanceAmount / 4,
+      ]; // fallback
+
+      perWeek.forEach((amount, index) => {
+        const dueDate = new Date(batchStart);
+        dueDate.setDate(dueDate.getDate() + index * 7); // first week = batchStartDate
+
         scheduledPayments.push({
-          amount: perWeek,
+          amount,
           dueDate,
           studentId: existingFee.studentId,
           feeId: existingFee.id,
         });
-      }
-    } else if (existingFee.feePaymentMode === "70/30") {
-      const first = Math.round(updatedBalance * 0.7);
-      const second = updatedBalance - first;
+      });
+    }
+    let perPayment;
 
-      const firstDue = new Date(batchStartDate);
-      const secondDue = new Date(batchStartDate);
-      secondDue.setDate(secondDue.getDate() + 30);
+    if (existingFee.feePaymentMode === "70/30") {
+      const courseName =
+        existingFee.student.currentBatch.course.name.toUpperCase();
+
+      // Define fixed amounts per course if needed
+      const coursePaymentMap = {
+        "STOCK OFFLINE": [19000, 11400], // example
+        "FOREX OFFLINE": [19000, 11400],
+        "STOCK ONLINE": [11000, 9000],
+        "FOREX ONLINE": [11000, 9000],
+      };
+
+      // Use mapped amounts if available, else fallback to 70/30 split
+      perPayment = coursePaymentMap[courseName] || [
+        Math.round(existingFee.balanceAmount * 0.7),
+        existingFee.balanceAmount - Math.round(existingFee.balanceAmount * 0.7),
+      ];
+
+      const firstDue = new Date(
+        batchStartDate > new Date() ? batchStartDate : new Date()
+      );
+      const secondDue = new Date(firstDue);
+      secondDue.setMonth(secondDue.getMonth() + 1); 
 
       scheduledPayments.push(
         {
-          amount: first,
+          amount: perPayment[0],
           dueDate: firstDue,
           studentId: existingFee.studentId,
           feeId: existingFee.id,
         },
         {
-          amount: second,
+          amount: perPayment[1],
           dueDate: secondDue,
           studentId: existingFee.studentId,
           feeId: existingFee.id,
@@ -103,7 +149,7 @@ export const createPayment = TryCatch(async (req, res) => {
       transactionId,
       note,
       feeId,
-      paidAt: new Date(),
+      paidAt,
       studentId: existingFee.studentId,
       status: "PAID",
     },
