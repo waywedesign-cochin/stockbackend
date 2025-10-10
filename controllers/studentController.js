@@ -120,6 +120,7 @@ export const getStudents = TryCatch(async (req, res) => {
           select: {
             id: true,
             totalCourseFee: true,
+            advanceAmount: true,
             finalFee: true,
             discountAmount: true,
             balanceAmount: true,
@@ -315,14 +316,34 @@ export const updateStudent = TryCatch(async (req, res) => {
 //delete student
 export const deleteStudent = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const student = await prisma.student.delete({
-    where: { id: id },
+
+  // Delete payments
+  await prisma.payment.deleteMany({
+    where: { studentId: id },
   });
+
+  // Delete fees
+  await prisma.fee.deleteMany({
+    where: { studentId: id },
+  });
+
+  // Update batch count
+  const student = await prisma.student.findUnique({
+    where: { id },
+    select: { currentBatchId: true },
+  });
+
   if (student) {
-    const decrementCount = await prisma.batch.update({
+    await prisma.batch.update({
       where: { id: student.currentBatchId },
       data: { currentCount: { decrement: 1 } },
     });
   }
+
+  // Delete student
+  await prisma.student.delete({
+    where: { id },
+  });
+
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
