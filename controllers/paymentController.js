@@ -95,7 +95,7 @@ export const createPayment = TryCatch(async (req, res) => {
         batchStartDate > new Date() ? batchStartDate : new Date()
       );
       const secondDue = new Date(firstDue);
-      secondDue.setMonth(secondDue.getMonth() + 1); 
+      secondDue.setMonth(secondDue.getMonth() + 1);
 
       scheduledPayments.push(
         {
@@ -160,9 +160,9 @@ export const createPayment = TryCatch(async (req, res) => {
 
 //get payments
 export const getPayment = TryCatch(async (req, res) => {
-  const { paymentId } = req.params;
+  const { studentId } = req.params;
   const payments = await prisma.payment.findMany({
-    where: { id: paymentId },
+    where: { studentId },
     include: {
       fee: {
         include: {
@@ -174,6 +174,9 @@ export const getPayment = TryCatch(async (req, res) => {
         },
       },
     },
+    orderBy: {
+      dueDate: "asc",
+    },
   });
   sendResponse(res, 200, true, "Payments fetched successfully", payments);
 });
@@ -181,8 +184,7 @@ export const getPayment = TryCatch(async (req, res) => {
 //update payment
 export const editPayment = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
-  const { amount, mode, transactionId, note, dueDate, status, paidAt } =
-    req.body;
+  const { amount, mode, transactionId, note, dueDate, paidAt } = req.body;
 
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
@@ -190,9 +192,6 @@ export const editPayment = TryCatch(async (req, res) => {
   });
 
   if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
-
-  if (payment.paidAt)
-    return sendResponse(res, 400, false, "Payment already recorded", null);
 
   // Update Payment
   const updatedPayment = await prisma.payment.update({
@@ -204,7 +203,7 @@ export const editPayment = TryCatch(async (req, res) => {
       transactionId,
       note,
       paidAt,
-      status,
+      status: paidAt ? "PAID" : "PENDING",
     },
   });
 
@@ -233,7 +232,8 @@ export const editPayment = TryCatch(async (req, res) => {
 //create payment due
 export const createPaymentDue = TryCatch(async (req, res) => {
   const { feeId } = req.params;
-  const { amount, dueDate } = req.body;
+  const { amount, dueDate, note } = req.body;
+
   const existingFee = await prisma.fee.findUnique({
     where: { id: feeId },
     include: {
@@ -252,6 +252,7 @@ export const createPaymentDue = TryCatch(async (req, res) => {
       amount,
       dueDate,
       feeId,
+      note,
       studentId: existingFee.studentId,
     },
   });
