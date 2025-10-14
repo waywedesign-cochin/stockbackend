@@ -3,13 +3,14 @@ import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
 //add course
 export const addCourse = TryCatch(async (req, res) => {
-  const { name, description, baseFee, duration } = req.body;
+  const { name, description, baseFee, duration, mode } = req.body;
   const course = await prisma.course.create({
     data: {
       name,
       description,
       baseFee,
       duration,
+      mode,
     },
     include: {
       batches: true,
@@ -34,7 +35,7 @@ export const getCourses = TryCatch(async (req, res) => {
 //update course
 export const updateCourse = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const { name, description, baseFee, duration, isActive } = req.body;
+  const { name, description, baseFee, duration, mode, isActive } = req.body;
   const course = await prisma.course.update({
     where: { id: id },
     data: {
@@ -42,6 +43,7 @@ export const updateCourse = TryCatch(async (req, res) => {
       description,
       baseFee,
       duration,
+      mode,
       isActive,
     },
   });
