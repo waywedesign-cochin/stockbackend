@@ -17,6 +17,6 @@ router.post("/create-payment-due/:feeId", createPaymentDue);
 router.get("/get-payments/:studentId", getPayment);
 
 //update payment
-router.put("/record-payment/:paymentId", editPayment);
+router.put("/update-payment/:paymentId", editPayment);
 
 export default router;
