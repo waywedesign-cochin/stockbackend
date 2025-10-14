@@ -1,5 +1,5 @@
 import { sendResponse } from "../utils/responseHandler.js";
-import { TryCatch } from "../utils/TryCatch.jd";
+import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
 import crypto from "crypto";
 

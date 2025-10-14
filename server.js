@@ -8,6 +8,8 @@ import courseRouter from "./routes/course.js";
 import studentRouter from "./routes/student.js";
 import feeRouter from "./routes/fee.js";
 import paymentRouter from "./routes/payment.js";
+import batchHistoryRouter from "./routes/batchHistory.js";
+
 const app = express();
 
 // Parse JSON requests
@@ -39,6 +41,7 @@ app.use("/api/course", courseRouter);
 app.use("/api/student", studentRouter);
 app.use("/api/fee", feeRouter);
 app.use("/api/payment", paymentRouter);
+app.use("/api/batchHistory", batchHistoryRouter);
 
 const port = process.env.PORT || 3001;
 
