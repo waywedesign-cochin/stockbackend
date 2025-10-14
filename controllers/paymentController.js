@@ -1,7 +1,6 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
-import e from "express";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {

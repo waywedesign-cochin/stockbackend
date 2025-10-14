@@ -14,7 +14,6 @@ export const addBatch = TryCatch(async (req, res) => {
     coordinator,
     slotLimit,
     currentCount,
-    mode,
     description,
   } = req.body;
   const batch = await prisma.batch.create({
@@ -28,7 +27,6 @@ export const addBatch = TryCatch(async (req, res) => {
       coordinator,
       slotLimit,
       currentCount,
-      mode,
       description,
     },
     include: {
@@ -86,7 +84,7 @@ export const getBatches = TryCatch(async (req, res) => {
   if (course)
     where.course = { name: { contains: course, mode: "insensitive" } };
   if (status) where.status = status;
-  if (mode) where.mode = mode;
+  if (mode) where.course = { name: { contains: mode, mode: "insensitive" } };
 
   if (search) {
     where.OR = [
@@ -157,7 +155,6 @@ export const updateBatch = TryCatch(async (req, res) => {
     coordinator,
     slotLimit,
     currentCount,
-    mode,
     status,
     description,
   } = req.body;
@@ -173,7 +170,6 @@ export const updateBatch = TryCatch(async (req, res) => {
       coordinator,
       slotLimit,
       currentCount,
-      mode,
       status,
       description,
     },

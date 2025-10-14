@@ -66,6 +66,7 @@ export const addStudent = TryCatch(async (req, res) => {
       balanceAmount: null,
       feePaymentMode: null,
       studentId: student?.id,
+      batchId: student?.currentBatchId,
     },
   });
 
@@ -178,7 +179,7 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           },
         },
-        mode && { mode },
+        mode && { course: { mode } },
         status && { status },
       ].filter(Boolean),
     };

@@ -38,24 +38,26 @@ model Location {
 }
 
 model Batch {
-  id           String      @id @default(uuid())
-  name         String
-  year         Int
-  startDate    DateTime?
-  location     Location    @relation(fields: [locationId], references: [id])
-  locationId   String
-  course       Course      @relation(fields: [courseId], references: [id])
-  courseId     String
-  tutor        String?
-  coordinator  String?
-  slotLimit    Int         @default(30)
-  currentCount Int         @default(0)
-  mode         BatchMode
-  status       BatchStatus @default(PENDING)
-  students     Student[]
-  description  String?
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id               String         @id @default(uuid())
+  name             String
+  year             Int
+  startDate        DateTime?
+  location         Location       @relation(fields: [locationId], references: [id])
+  locationId       String
+  course           Course         @relation(fields: [courseId], references: [id])
+  courseId         String
+  tutor            String?
+  coordinator      String?
+  slotLimit        Int            @default(30)
+  currentCount     Int            @default(0)
+  status           BatchStatus    @default(PENDING)
+  students         Student[]
+  description      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  fromBatchHistory batchHistory[] @relation("FromBatchHistory")
+  toBatchHistory   batchHistory[] @relation("ToBatchHistory")
+  Fee              Fee[]
 
   @@map("batches")
 }
@@ -63,6 +65,7 @@ model Batch {
 enum BatchMode {
   ONLINE
   OFFLINE
+  COMBINED
 }
 
 enum BatchStatus {
@@ -78,6 +81,7 @@ model Course {
   description String
   baseFee     Float
   duration    Int
+  mode        BatchMode
   batches     Batch[]
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -102,26 +106,36 @@ model Student {
   fees     Fee[]
   payments Payment[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  batchHistory batchHistory[]
 
   @@map("students")
 }
 
 model Fee {
-  id             String    @id @default(uuid())
+  id             String  @id @default(uuid())
   totalCourseFee Int
   finalFee       Int?
-  discountAmount Int?      @default(0)
+  discountAmount Int?    @default(0)
   advanceAmount  Int?
   balanceAmount  Int?
   feePaymentMode String?
-  student        Student   @relation(fields: [studentId], references: [id])
-  studentId      String
-  payments       Payment[]
-  status         String    @default("PENDING")
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  status         String  @default("PENDING")
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  batch   Batch  @relation(fields: [batchId], references: [id])
+  batchId String
+
+  payments Payment[]
+
+  batchHistoryFrom batchHistory[] @relation("FeeFromBatchHistory")
+  batchHistoryTo   batchHistory[] @relation("FeeToBatchHistory")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("fees")
 }
@@ -139,8 +153,38 @@ model Payment {
   studentId     String
   fee           Fee       @relation(fields: [feeId], references: [id])
   feeId         String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@map("payments")
+}
+
+model batchHistory {
+  id String @id @default(uuid())
+
+  // Batches involved
+  fromBatch   Batch  @relation("FromBatchHistory", fields: [fromBatchId], references: [id])
+  fromBatchId String
+  toBatch     Batch  @relation("ToBatchHistory", fields: [toBatchId], references: [id])
+  toBatchId   String
+
+  student   Student @relation(fields: [studentId], references: [id])
+  studentId String
+
+  // Fees before and after transfer
+  feeIdFrom String? @map("fee_id_from")
+  feeFrom   Fee?    @relation("FeeFromBatchHistory", fields: [feeIdFrom], references: [id])
+
+  feeIdTo String? @map("fee_id_to")
+  feeTo   Fee?    @relation("FeeToBatchHistory", fields: [feeIdTo], references: [id])
+
+  // Unique transfer ID
+  transferId String @default(uuid())
+
+  changeDate DateTime
+  reason     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("batchHistories")
 }

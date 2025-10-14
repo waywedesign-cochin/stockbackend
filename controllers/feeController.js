@@ -63,6 +63,7 @@ export const updateFee = TryCatch(async (req, res) => {
   const fee = await prisma.fee.update({
     where: { id },
     data: {
+      batchId:existingFee.student.currentBatchId,
       discountAmount: finalDiscount,
       finalFee: updatedFinalFee,
       balanceAmount: updatedBalance,
