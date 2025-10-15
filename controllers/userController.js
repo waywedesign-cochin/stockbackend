@@ -20,7 +20,13 @@ export const signUp = TryCatch(async (req, res) => {
       password: hashedPassword,
     },
   });
-  sendResponse(res, 201, true, "User created successfully", newUser);
+  sendResponse(
+    res,
+    201,
+    true,
+    "Signup successful. Please login to continue",
+    newUser
+  );
 });
 
 export const login = TryCatch(async (req, res) => {
