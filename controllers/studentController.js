@@ -158,17 +158,20 @@ export const getStudents = TryCatch(async (req, res) => {
     where.isFundedAccount = isFundedAccount === "true";
   }
 
-  // Combine Batch, Location, Mode filters (default + selected)
-  if (batch || location || mode || status) {
-    where.currentBatch = {
-      AND: [
-        batch && {
-          OR: [
-            { id: batch },
-            { name: { contains: batch, mode: "insensitive" } },
-          ],
-        },
-        location && {
+  if (batch || location || mode || status || course) {
+    where.AND = [
+      //  Batch filter — students currently in batch OR switched from/to it
+      batch && {
+        OR: [
+          { currentBatchId: batch },
+          { batchHistory: { some: { fromBatchId: batch } } },
+          { batchHistory: { some: { toBatchId: batch } } },
+        ],
+      },
+
+      // Location filter
+      location && {
+        currentBatch: {
           location: {
             OR: [
               { id: location },
@@ -176,7 +179,11 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           },
         },
-        course && {
+      },
+
+      // Course filter
+      course && {
+        currentBatch: {
           course: {
             OR: [
               { id: course },
@@ -184,10 +191,20 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           },
         },
-        mode && { course: { name: { contains: mode, mode: "insensitive" } } },
-        status && { status },
-      ].filter(Boolean),
-    };
+      },
+
+      // Mode filter
+      mode && {
+        currentBatch: {
+          course: {
+            mode,
+          },
+        },
+      },
+
+      // Status filter
+      status && { currentBatch: { status } },
+    ].filter(Boolean);
   }
 
   if (search) {
@@ -322,36 +339,36 @@ export const updateStudent = TryCatch(async (req, res) => {
   sendResponse(res, 200, true, "Student updated successfully", student);
 });
 
-//delete student
+//Delete student
 export const deleteStudent = TryCatch(async (req, res) => {
   const { id } = req.params;
 
-  // Delete payments
-  await prisma.payment.deleteMany({
-    where: { studentId: id },
-  });
+  await prisma.$transaction(async (prisma) => {
+    // Delete payments
+    await prisma.payment.deleteMany({ where: { studentId: id } });
 
-  // Delete fees
-  await prisma.fee.deleteMany({
-    where: { studentId: id },
-  });
+    // Delete fees
+    await prisma.fee.deleteMany({ where: { studentId: id } });
 
-  // Update batch count
-  const student = await prisma.student.findUnique({
-    where: { id },
-    select: { currentBatchId: true },
-  });
+    // Delete batch history
+    await prisma.batchHistory.deleteMany({ where: { studentId: id } });
 
-  if (student) {
-    await prisma.batch.update({
-      where: { id: student.currentBatchId },
-      data: { currentCount: { decrement: 1 } },
+    // Get current batch
+    const student = await prisma.student.findUnique({
+      where: { id },
+      select: { currentBatchId: true },
     });
-  }
 
-  // Delete student
-  await prisma.student.delete({
-    where: { id },
+    // Update batch count
+    if (student) {
+      await prisma.batch.update({
+        where: { id: student.currentBatchId },
+        data: { currentCount: { decrement: 1 } },
+      });
+    }
+
+    // Delete student
+    await prisma.student.delete({ where: { id } });
   });
 
   sendResponse(res, 200, true, "Student deleted successfully", null);
