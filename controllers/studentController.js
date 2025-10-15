@@ -184,7 +184,7 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           },
         },
-        mode && { mode },
+        mode && { course: { name: { contains: mode, mode: "insensitive" } } },
         status && { status },
       ].filter(Boolean),
     };
