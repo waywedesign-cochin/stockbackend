@@ -135,8 +135,24 @@ export const getStudents = TryCatch(async (req, res) => {
                 transferId: true,
                 changeDate: true,
                 reason: true,
-                fromBatch: true,
-                toBatch: true,
+                fromBatch: {
+                  select: {
+                    id: true,
+                    name: true,
+                    year: true,
+                    status: true,
+                    course: true,
+                  },
+                },
+                toBatch: {
+                  select: {
+                    id: true,
+                    name: true,
+                    year: true,
+                    status: true,
+                    course: true,
+                  },
+                },
               },
             },
             batchHistoryTo: {
@@ -145,8 +161,24 @@ export const getStudents = TryCatch(async (req, res) => {
                 transferId: true,
                 changeDate: true,
                 reason: true,
-                fromBatch: true,
-                toBatch: true,
+                fromBatch: {
+                  select: {
+                    id: true,
+                    name: true,
+                    year: true,
+                    status: true,
+                    course: true,
+                  },
+                },
+                toBatch: {
+                  select: {
+                    id: true,
+                    name: true,
+                    year: true,
+                    status: true,
+                    course: true,
+                  },
+                },
               },
             },
             status: true,
@@ -285,8 +317,24 @@ export const getStudents = TryCatch(async (req, res) => {
               transferId: true,
               changeDate: true,
               reason: true,
-              fromBatch: true, // include all batch fields
-              toBatch: true,
+              fromBatch: {
+                select: {
+                  id: true,
+                  name: true,
+                  year: true,
+                  status: true,
+                  course: true,
+                },
+              },
+              toBatch: {
+                select: {
+                  id: true,
+                  name: true,
+                  year: true,
+                  status: true,
+                  course: true,
+                },
+              },
             },
           },
           batchHistoryTo: {
@@ -295,8 +343,24 @@ export const getStudents = TryCatch(async (req, res) => {
               transferId: true,
               changeDate: true,
               reason: true,
-              fromBatch: true,
-              toBatch: true,
+              fromBatch: {
+                select: {
+                  id: true,
+                  name: true,
+                  year: true,
+                  status: true,
+                  course: true,
+                },
+              },
+              toBatch: {
+                select: {
+                  id: true,
+                  name: true,
+                  year: true,
+                  status: true,
+                  course: true,
+                },
+              },
             },
           },
           status: true,
