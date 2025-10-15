@@ -34,7 +34,6 @@ export const addStudent = TryCatch(async (req, res) => {
           name: true,
           year: true,
           status: true,
-          mode: true,
           tutor: true,
           coordinator: true,
           location: true,
@@ -65,10 +64,13 @@ export const addStudent = TryCatch(async (req, res) => {
       discountAmount: 0,
       balanceAmount: null,
       feePaymentMode: null,
-      studentId: student?.id,
-      batchId: student?.currentBatchId,
+      studentId: student.id,
+      batchId: student.currentBatchId,
     },
   });
+  if (!fee) {
+    return sendResponse(res, 500, false, "Failed to add fee", null);
+  }
 
   sendResponse(res, 200, true, "Student added successfully with fee", {
     student,
@@ -96,7 +98,6 @@ export const getStudents = TryCatch(async (req, res) => {
             name: true,
             year: true,
             status: true,
-            mode: true,
             tutor: true,
             coordinator: true,
             location: {
@@ -113,6 +114,7 @@ export const getStudents = TryCatch(async (req, res) => {
                 baseFee: true,
                 duration: true,
                 isActive: true,
+                mode: true,
               },
             },
           },
@@ -126,6 +128,9 @@ export const getStudents = TryCatch(async (req, res) => {
             discountAmount: true,
             balanceAmount: true,
             feePaymentMode: true,
+            batch: true,
+            batchHistoryFrom: true,
+            batchHistoryTo: true,
             status: true,
             payments: true,
           },
@@ -179,7 +184,7 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           },
         },
-        mode && { course: { mode } },
+        mode && { mode },
         status && { status },
       ].filter(Boolean),
     };
@@ -209,7 +214,6 @@ export const getStudents = TryCatch(async (req, res) => {
           name: true,
           year: true,
           status: true,
-          mode: true,
           tutor: true,
           coordinator: true,
           location: {
@@ -225,6 +229,7 @@ export const getStudents = TryCatch(async (req, res) => {
               name: true,
               baseFee: true,
               duration: true,
+              mode: true,
               isActive: true,
             },
           },
@@ -238,6 +243,9 @@ export const getStudents = TryCatch(async (req, res) => {
           discountAmount: true,
           balanceAmount: true,
           feePaymentMode: true,
+          batch: true,
+          batchHistoryFrom: true,
+          batchHistoryTo: true,
           status: true,
         },
       },
