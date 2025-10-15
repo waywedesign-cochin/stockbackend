@@ -76,16 +76,16 @@ enum BatchStatus {
 }
 
 model Course {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String    @id @default(uuid())
+  name        String    @unique
   description String
   baseFee     Float
   duration    Int
   mode        BatchMode
   batches     Batch[]
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@map("courses")
 }
@@ -134,8 +134,9 @@ model Fee {
   batchHistoryFrom batchHistory[] @relation("FeeFromBatchHistory")
   batchHistoryTo   batchHistory[] @relation("FeeToBatchHistory")
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  transferId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@map("fees")
 }
