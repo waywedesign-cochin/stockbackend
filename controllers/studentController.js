@@ -129,8 +129,26 @@ export const getStudents = TryCatch(async (req, res) => {
             balanceAmount: true,
             feePaymentMode: true,
             batch: true,
-            batchHistoryFrom: true,
-            batchHistoryTo: true,
+            batchHistoryFrom: {
+              select: {
+                id: true,
+                transferId: true,
+                changeDate: true,
+                reason: true,
+                fromBatch: true,
+                toBatch: true,
+              },
+            },
+            batchHistoryTo: {
+              select: {
+                id: true,
+                transferId: true,
+                changeDate: true,
+                reason: true,
+                fromBatch: true,
+                toBatch: true,
+              },
+            },
             status: true,
             payments: true,
           },
@@ -261,8 +279,26 @@ export const getStudents = TryCatch(async (req, res) => {
           balanceAmount: true,
           feePaymentMode: true,
           batch: true,
-          batchHistoryFrom: true,
-          batchHistoryTo: true,
+          batchHistoryFrom: {
+            select: {
+              id: true,
+              transferId: true,
+              changeDate: true,
+              reason: true,
+              fromBatch: true, // include all batch fields
+              toBatch: true,
+            },
+          },
+          batchHistoryTo: {
+            select: {
+              id: true,
+              transferId: true,
+              changeDate: true,
+              reason: true,
+              fromBatch: true,
+              toBatch: true,
+            },
+          },
           status: true,
         },
       },
