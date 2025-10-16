@@ -41,7 +41,7 @@ app.use("/api/course", courseRouter);
 app.use("/api/student", studentRouter);
 app.use("/api/fee", feeRouter);
 app.use("/api/payment", paymentRouter);
-app.use("/api/batchHistory", batchHistoryRouter);
+app.use("/api/batch-history", batchHistoryRouter);
 
 const port = process.env.PORT || 3001;
 
