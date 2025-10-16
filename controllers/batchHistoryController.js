@@ -50,7 +50,7 @@ export const switchBatch = TryCatch(async (req, res) => {
       res,
       400,
       false,
-      "Student already has a fee record for the target batch",
+      "Cannot switch to same batch twice",
       null
     );
 
