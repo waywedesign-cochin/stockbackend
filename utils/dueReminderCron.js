@@ -18,7 +18,7 @@ const transporter = nodemailer.createTransport({
 // Function to send email
 async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
   const mailOptions = {
-    from: '"Academy" <no-reply@academy.com>',
+    from: '"SK & SL Associate Private Limited" <no-reply@sk&sl-associate-private-limited.com>',
     to: studentEmail,
     subject: "Payment Due Reminder",
     text: `Hello ${studentName},\n\nYou have a payment of ₹${amount.toLocaleString()} due today (${dueDate.toDateString()}). Please make the payment on time.\n\nThank you!`,
