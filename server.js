@@ -10,6 +10,8 @@ import feeRouter from "./routes/fee.js";
 import paymentRouter from "./routes/payment.js";
 import batchHistoryRouter from "./routes/batchHistory.js";
 
+//due reminder cron job
+import "./utils/dueReminderCron.js";
 const app = express();
 
 // Parse JSON requests
