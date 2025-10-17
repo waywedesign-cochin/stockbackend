@@ -184,6 +184,7 @@ export const getStudents = TryCatch(async (req, res) => {
             status: true,
             payments: true,
           },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
@@ -365,6 +366,7 @@ export const getStudents = TryCatch(async (req, res) => {
           },
           status: true,
         },
+        orderBy: { createdAt: "desc" },
       },
       payments: {
         select: {
