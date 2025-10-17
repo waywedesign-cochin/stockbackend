@@ -80,8 +80,21 @@ export const addStudent = TryCatch(async (req, res) => {
 
 //get student by filters
 export const getStudents = TryCatch(async (req, res) => {
-  const { id, search, isFundedAccount, location, batch, mode, status, course } =
-    req.query;
+  const {
+    id,
+    search,
+    isFundedAccount,
+    location,
+    batch,
+    mode,
+    status,
+    course,
+    switched,
+    month,
+    year,
+    feeStatus,
+    dueThisWeek,
+  } = req.query;
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -208,8 +221,29 @@ export const getStudents = TryCatch(async (req, res) => {
   if (isFundedAccount !== undefined) {
     where.isFundedAccount = isFundedAccount === "true";
   }
+  //filter due on current week
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
+  const diffToMonday = (dayOfWeek + 6) % 7; // days to subtract to get Monday
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - diffToMonday);
+  weekStart.setHours(0, 0, 0, 0);
 
-  if (batch || location || mode || status || course) {
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  if (
+    batch ||
+    location ||
+    mode ||
+    status ||
+    course ||
+    switched ||
+    month ||
+    year ||
+    feeStatus ||
+    dueThisWeek
+  ) {
     where.AND = [
       //  Batch filter — students currently in batch OR switched from/to it
       batch && {
@@ -255,6 +289,45 @@ export const getStudents = TryCatch(async (req, res) => {
 
       // Status filter
       status && { currentBatch: { status } },
+      switched === "true"
+        ? {
+            OR: [
+              { fees: { some: { batchHistoryFrom: { some: {} } } } },
+              { fees: { some: { batchHistoryTo: { some: {} } } } },
+            ],
+          }
+        : switched === "false"
+        ? {
+            AND: [
+              { fees: { none: { batchHistoryFrom: { some: {} } } } },
+              { fees: { none: { batchHistoryTo: { some: {} } } } },
+            ],
+          }
+        : undefined,
+      (year || month) && {
+        createdAt: {
+          gte: month ? new Date(year, month - 1, 1) : new Date(year, 0, 1),
+          lte: month
+            ? new Date(year, month, 0, 23, 59, 59, 999)
+            : new Date(year, 11, 31, 23, 59, 59, 999),
+        },
+      },
+
+      feeStatus && {
+        fees: {
+          some: {
+            status: feeStatus,
+          },
+        },
+      },
+      dueThisWeek && {
+        payments: {
+          some: {
+            dueDate: { gte: weekStart, lte: weekEnd },
+            status: "PENDING",
+          },
+        },
+      },
     ].filter(Boolean);
   }
 
