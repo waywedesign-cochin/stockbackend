@@ -50,7 +50,7 @@ export const updateFee = TryCatch(async (req, res) => {
     discountAmount !== undefined ? discountAmount : existingFee.discountAmount;
 
   // Update finalFee and balanceAmount based on discount
-  const updatedFinalFee = (existingFee.totalCourseFee || 0) - finalDiscount;
+  const updatedFinalFee = (existingFee.finalFee || 0) - finalDiscount;
 
   const updatedBalance =
     feePaymentMode === "fullPayment"
