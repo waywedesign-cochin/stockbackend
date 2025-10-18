@@ -68,7 +68,19 @@ export const getCurrentUser = TryCatch(async (req, res) => {
 });
 
 export const getAllUsers = TryCatch(async (req, res) => {
+  const { role, search } = req.query;
+  let whereClause = {};
+  if (role) {
+    whereClause.role = role;
+  }
+  if (search) {
+    whereClause.OR = [
+      { username: { contains: search, mode: "insensitive" } },
+      { email: { contains: search, mode: "insensitive" } },
+    ];
+  }
   const users = await prisma.user.findMany({
+    where: whereClause,
     include: {
       location: true,
     },

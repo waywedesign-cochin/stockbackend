@@ -456,7 +456,7 @@ export const getStudents = TryCatch(async (req, res) => {
     },
     skip,
     take: limit,
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: "asc" },
   });
 
   return sendResponse(res, 200, true, "Students fetched successfully", {
