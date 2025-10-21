@@ -31,6 +31,6 @@ router.get("/get-user/:id", getUser);
 router.put("/update-user/:id", updateUser);
 
 //delete user
-router.delete("/delete-user",deleteUser)
+router.delete("/delete-user/:id",deleteUser)
 
 export default router;
