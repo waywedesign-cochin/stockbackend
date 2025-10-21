@@ -114,3 +114,12 @@ export const updateUser = TryCatch(async (req, res) => {
   });
   sendResponse(res, 200, true, "User updated successfully", user);
 });
+
+//delete user
+export const deleteUser = TryCatch(async (req, res) => {
+  const { id } = req.params;
+  const user = await prisma.user.delete({
+    where: { id },
+  });
+  sendResponse(res, 200, true, "User deleted successfully", user);
+});

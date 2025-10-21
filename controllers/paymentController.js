@@ -228,7 +228,26 @@ export const editPayment = TryCatch(async (req, res) => {
   });
 });
 
-//create payment due
+//delete payment
+export const deletePayment = TryCatch(async (req, res) => {
+  const { paymentId } = req.params;
+
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    include: { fee: true },
+  });
+
+  if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
+
+  // Delete Payment
+  await prisma.payment.delete({
+    where: { id: paymentId },
+  });
+
+  sendResponse(res, 200, true, "Payment deleted successfully", payment);
+});
+
+//-----------------create payment due------------------------------------
 export const createPaymentDue = TryCatch(async (req, res) => {
   const { feeId } = req.params;
   const { amount, dueDate, note } = req.body;
@@ -256,4 +275,29 @@ export const createPaymentDue = TryCatch(async (req, res) => {
     },
   });
   sendResponse(res, 200, true, "Payment due created successfully", payment);
+});
+
+//edit payment due
+export const editPaymentDue = TryCatch(async (req, res) => {
+  const { paymentId } = req.params;
+  const { amount, dueDate, note } = req.body;
+  const payment = await prisma.payment.findUnique({
+    where: { id: paymentId },
+  });
+  if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
+  const updatedPayment = await prisma.payment.update({
+    where: { id: paymentId },
+    data: {
+      amount,
+      dueDate,
+      note,
+    },
+  });
+  sendResponse(
+    res,
+    200,
+    true,
+    "Payment due updated successfully",
+    updatedPayment
+  );
 });

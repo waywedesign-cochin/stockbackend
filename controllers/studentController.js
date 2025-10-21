@@ -13,6 +13,7 @@ export const addStudent = TryCatch(async (req, res) => {
     salesperson,
     isFundedAccount,
     currentBatchId,
+    referralInfo
   } = req.body;
 
   // 1️⃣ Create Student
@@ -26,6 +27,7 @@ export const addStudent = TryCatch(async (req, res) => {
       salesperson,
       isFundedAccount,
       currentBatchId,
+      referralInfo
     },
     include: {
       currentBatch: {
@@ -456,7 +458,7 @@ export const getStudents = TryCatch(async (req, res) => {
     },
     skip,
     take: limit,
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
   });
 
   return sendResponse(res, 200, true, "Students fetched successfully", {
@@ -482,6 +484,7 @@ export const updateStudent = TryCatch(async (req, res) => {
     salesperson,
     isFundedAccount,
     currentBatchId,
+    referralInfo
   } = req.body;
   const student = await prisma.student.update({
     where: { id: id },
@@ -494,6 +497,7 @@ export const updateStudent = TryCatch(async (req, res) => {
       salesperson,
       isFundedAccount,
       currentBatchId,
+      referralInfo
     },
     include: {
       currentBatch: {
