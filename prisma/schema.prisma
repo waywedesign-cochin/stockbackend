@@ -99,9 +99,9 @@ model Student {
   address         String?
   salesperson     String?
   isFundedAccount Boolean @default(false)
-
-  currentBatch   Batch  @relation(fields: [currentBatchId], references: [id])
-  currentBatchId String
+  referralInfo    String?
+  currentBatch    Batch   @relation(fields: [currentBatchId], references: [id])
+  currentBatchId  String
 
   fees     Fee[]
   payments Payment[]

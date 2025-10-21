@@ -6,6 +6,7 @@ import {
   getUser,
   updateUser,
   getCurrentUser,
+  deleteUser,
 } from "../controllers/userController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 
@@ -28,5 +29,8 @@ router.get("/get-user/:id", getUser);
 
 //update user by id
 router.put("/update-user/:id", updateUser);
+
+//delete user
+router.delete("/delete-user",deleteUser)
 
 export default router;
