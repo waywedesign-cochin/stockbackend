@@ -1,6 +1,7 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
+import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
@@ -153,8 +154,16 @@ export const createPayment = TryCatch(async (req, res) => {
       status: "PAID",
     },
   });
+  try {
+    await sendSlotBookingEmail(existingFee);
+    console.log(
+      `Slot booking email sent for student ${existingFee.student.name}`
+    );
+  } catch (err) {
+    console.error("Error sending slot booking email:", err);
+  }
 
-  sendResponse(res, 201, true, "Payment created successfully", payment);
+  sendResponse(res, 201, true, "Payment created successfully.", payment);
 });
 
 //get payments

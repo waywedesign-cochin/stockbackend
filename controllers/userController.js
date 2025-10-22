@@ -24,7 +24,7 @@ export const signUp = TryCatch(async (req, res) => {
     res,
     201,
     true,
-    "Signup successful. Please login to continue",
+    "Signup successful. Wait for admin approval.",
     newUser
   );
 });
@@ -40,6 +40,17 @@ export const login = TryCatch(async (req, res) => {
   const isPasswordValid = await bcrypt.compare(password, user.password);
   if (!isPasswordValid) {
     return sendResponse(res, 400, false, "Invalid email or password", null);
+  }
+
+  //role check
+  if (user.role === 4) {
+    return sendResponse(
+      res,
+      403,
+      false,
+      "Access denied. Contact administrator.",
+      null
+    );
   }
 
   const token = jwt.sign(
@@ -70,9 +81,11 @@ export const getCurrentUser = TryCatch(async (req, res) => {
 export const getAllUsers = TryCatch(async (req, res) => {
   const { role, search } = req.query;
   let whereClause = {};
-  if (role) {
-    whereClause.role = role;
+
+  if (role && role !== "0") {
+    whereClause.role = parseInt(role, 10);
   }
+
   if (search) {
     whereClause.OR = [
       { username: { contains: search, mode: "insensitive" } },

@@ -18,7 +18,7 @@ model User {
   username   String
   email      String    @unique
   password   String
-  role       Int       @default(3) // 1: admin, 2: director, 3:staff
+  role       Int       @default(4) // 1: admin, 2: director, 3:staff, 4: guest
   location   Location? @relation(fields: [locationId], references: [id])
   locationId String?
   createdAt  DateTime  @default(now())
