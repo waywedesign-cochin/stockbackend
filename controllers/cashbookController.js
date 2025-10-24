@@ -34,6 +34,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       },
     });
     const updatedBalance = student.fees[0].finalFee - amount;
+console.log(updatedBalance);
 
     // Update fee
     await prisma.fee.update({
