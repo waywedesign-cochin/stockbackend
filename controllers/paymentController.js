@@ -192,7 +192,7 @@ export const getPayment = TryCatch(async (req, res) => {
 //update payment
 export const editPayment = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
-  const { amount, mode, transactionId, note, dueDate, paidAt } = req.body;
+  const { amount, mode, transactionId, note, dueDate, paidAt ,isAdvance} = req.body;
 
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
@@ -228,6 +228,7 @@ export const editPayment = TryCatch(async (req, res) => {
     data: {
       balanceAmount: newBalance,
       status: newBalance === 0 ? "PAID" : "PENDING",
+      advanceAmount: isAdvance ? amount :null,
     },
   });
 
