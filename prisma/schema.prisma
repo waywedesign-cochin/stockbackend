@@ -14,26 +14,29 @@ datasource db {
 }
 
 model User {
-  id         String    @id @default(uuid())
-  username   String
-  email      String    @unique
-  password   String
-  role       Int       @default(4) // 1: admin, 2: director, 3:staff, 4: guest
-  location   Location? @relation(fields: [locationId], references: [id])
-  locationId String?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id             String           @id @default(uuid())
+  username       String
+  email          String           @unique
+  password       String
+  role           Int              @default(4) // 1: admin, 2: director, 3:staff, 4: guest
+  location       Location?        @relation(fields: [locationId], references: [id])
+  locationId     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  cashbook       cashbook[]
+  DirectorLedger DirectorLedger[]
 }
 
 model Location {
-  id        String     @id @default(uuid())
-  name      String     @unique
-  address   String?
-  batches   Batch[]
-  users     User[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  cashbook  cashbook[]
+  id             String           @id @default(uuid())
+  name           String           @unique
+  address        String?
+  batches        Batch[]
+  users          User[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  cashbook       cashbook[]
+  DirectorLedger DirectorLedger[]
 
   @@map("locations")
 }
@@ -107,10 +110,11 @@ model Student {
   fees     Fee[]
   payments Payment[]
 
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  batchHistory batchHistory[]
-  cashbook     cashbook[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  batchHistory   batchHistory[]
+  cashbook       cashbook[]
+  DirectorLedger DirectorLedger[]
 
   @@map("students")
 }
@@ -202,10 +206,34 @@ model cashbook {
   referenceId     String? // e.g., Payment ID or Expense ID
   location        Location @relation(fields: [locationId], references: [id])
   locationId      String
-  student         Student?  @relation(fields: [studentId], references: [id])
+  student         Student? @relation(fields: [studentId], references: [id])
   studentId       String?
+  director        User?    @relation(fields: [directorId], references: [id])
+  directorId      String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@map("cashbooks")
+}
+
+model DirectorLedger {
+  id              String   @id @default(uuid())
+  director        User     @relation(fields: [directorId], references: [id])
+  directorId      String
+  transactionDate DateTime
+  transactionType String // 'STUDENT_PAID' | 'OTHER_EXPENSE' | 'PERSONAL' | 'OWNER_TAKEN' 
+  amount          Int
+  debitCredit     String // 'DEBIT' or 'CREDIT'
+  description     String?
+  referenceId     String? // e.g., Payment ID or Expense ID
+  student         Student? @relation(fields: [studentId], references: [id])
+  studentId       String?
+
+  location   Location @relation(fields: [locationId], references: [id])
+  locationId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("director_ledgers")
 }

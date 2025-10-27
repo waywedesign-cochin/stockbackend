@@ -13,6 +13,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     locationId,
     referenceId,
     studentId,
+    directorId,
   } = req.body;
 
   // Create cashbook entry
@@ -26,11 +27,12 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       locationId,
       referenceId,
       studentId,
+      directorId,
     },
   });
 
   // Update fee and payment table if its a student payment
-  if (studentId && transactionType === "STUDENT_PAID") {
+  if (studentId) {
     const student = await prisma.student.findUnique({
       where: { id: studentId },
       include: {
@@ -79,6 +81,20 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
         },
       }),
     ]);
+  }
+  if (directorId) {
+    await prisma.directorLedger.create({
+      data: {
+        directorId,
+        transactionDate,
+        amount,
+        transactionType,
+        debitCredit: transactionType === "OWNER_TAKEN" ? "CREDIT" : "DEBIT",
+        description,
+        referenceId,
+        locationId,
+      },
+    });
   }
 
   // respond success
@@ -233,4 +249,42 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
       },
     },
   });
+});
+
+//update cashbook entry
+export const updateCashbookEntry = TryCatch(async (req, res) => {
+  const { id } = req.params;
+  const {
+    transactionDate,
+    amount,
+    transactionType,
+    debitCredit,
+    description,
+    referenceId,
+  } = req.body;
+  const entry = await prisma.cashbook.findUnique({ where: { id } });
+  if (!entry)
+    return sendResponse(res, 404, false, "Cashbook entry not found", null);
+  const updatedEntry = await prisma.cashbook.update({
+    where: { id },
+    data: {
+      transactionDate,
+      amount,
+      transactionType,
+      debitCredit,
+      description,
+      referenceId,
+    },
+  });
+  sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
+});
+
+//delete cashbook entry
+export const deleteCashbookEntry = TryCatch(async (req, res) => {
+  const { id } = req.params;
+  const entry = await prisma.cashbook.findUnique({ where: { id } });
+  if (!entry)
+    return sendResponse(res, 404, false, "Cashbook entry not found", null);
+  await prisma.cashbook.delete({ where: { id } });
+  sendResponse(res, 200, true, "Entry deleted successfully", null);
 });
