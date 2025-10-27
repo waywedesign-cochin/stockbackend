@@ -14,6 +14,8 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     referenceId,
     studentId,
   } = req.body;
+
+  // Create cashbook entry
   const newEntry = await prisma.cashbook.create({
     data: {
       transactionDate,
@@ -23,43 +25,70 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       description,
       locationId,
       referenceId,
+      studentId,
     },
   });
+
+  // Update fee and payment table if its a student payment
   if (studentId && transactionType === "STUDENT_PAID") {
     const student = await prisma.student.findUnique({
       where: { id: studentId },
       include: {
         fees: true,
-        payments: true,
-      },
-    });
-    const updatedBalance = student.fees[0].finalFee - amount;
-console.log(updatedBalance);
-
-    // Update fee
-    await prisma.fee.update({
-      where: { id: student.fees[0].id },
-      data: {
-        finalFee: student.fees[0].finalFee,
-        balanceAmount: updatedBalance,
-        status: updatedBalance === 0 ? "PAID" : "PENDING",
       },
     });
 
-    // Create payment record
-    await prisma.payment.create({
-      data: {
-        amount,
-        feeId: student.fees[0].id,
-        mode: "CASH",
-        studentId,
-        paidAt: transactionDate,
-        status: "PAID",
-        note: description,
-      },
-    });
+    if (!student) {
+      return sendResponse(res, 404, false, "Student not found");
+    }
+
+    if (!student.fees || student.fees.length === 0) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "No fee record found for this student"
+      );
+    }
+
+    const fee = student.fees[0]; //latest student fee
+
+    // update fee balance and status
+    const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
+    const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
+
+    // update fee and create payment record in a transaction
+    await prisma.$transaction([
+      prisma.fee.update({
+        where: { id: fee.id },
+        data: {
+          balanceAmount: updatedBalance,
+          status: newStatus,
+        },
+      }),
+
+      prisma.payment.create({
+        data: {
+          amount,
+          feeId: fee.id,
+          mode: "CASH",
+          studentId,
+          paidAt: validDate,
+          status: "PAID",
+          note: description || "Cash payment recorded",
+        },
+      }),
+    ]);
   }
-  return sendResponse(res, 201, true, "Cashbook entry added", newEntry);
+
+  // respond success
+  return sendResponse(
+    res,
+    201,
+    true,
+    "Cashbook entry added successfully",
+    newEntry
+  );
 });
 
 //get cashbook entries with filters and pagination

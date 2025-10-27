@@ -110,6 +110,7 @@ model Student {
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   batchHistory batchHistory[]
+  cashbook     cashbook[]
 
   @@map("students")
 }
@@ -201,6 +202,8 @@ model cashbook {
   referenceId     String? // e.g., Payment ID or Expense ID
   location        Location @relation(fields: [locationId], references: [id])
   locationId      String
+  student         Student?  @relation(fields: [studentId], references: [id])
+  studentId       String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
