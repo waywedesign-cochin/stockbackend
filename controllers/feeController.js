@@ -2,6 +2,7 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
 import e from "express";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 export const getFees = TryCatch(async (req, res) => {
   const { studentId } = req.params;
@@ -25,7 +26,11 @@ export const getFees = TryCatch(async (req, res) => {
 export const updateFee = TryCatch(async (req, res) => {
   const { id } = req.params;
   const { discountAmount, feePaymentMode } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const existingFee = await prisma.fee.findUnique({
     where: { id },
     include: {
@@ -175,6 +180,15 @@ export const updateFee = TryCatch(async (req, res) => {
   //     await prisma.payment.createMany({ data: scheduledPayments });
   //   }
   // }
+  await addCommunicationLogEntry(
+    loggedById,
+    "FEE_UPDATED",
+    new Date(),
+    "Fee Updated",
+    `Fee updated by ${userName} for ${existingFee.student.name} (${existingFee.student.currentBatch.name}). All scheduled payments have been reset.`,
+    studentId || null,
+    userLocationId
+  );
 
   sendResponse(res, 200, true, "Fee updated successfully.", fee);
 });

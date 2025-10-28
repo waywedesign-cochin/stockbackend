@@ -2,11 +2,18 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
 import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
   const { feeId, amount, mode, transactionId, note, paidAt, isAdvance } =
     req.body;
+
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
 
   const existingFee = await prisma.fee.findUnique({
     where: { id: feeId },
@@ -163,6 +170,18 @@ export const createPayment = TryCatch(async (req, res) => {
     console.error("Error sending slot booking email:", err);
   }
 
+  //create communication log
+  if (payment) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "PAYMENT_CREATED",
+      new Date(),
+      "Payment Created",
+      `Payment created by ${userName} and slot booking email sent for student ${existingFee.student.name} (${existingFee.student.currentBatch.name})`,
+      existingFee.studentId || null,
+      userLocationId
+    );
+  }
   sendResponse(res, 201, true, "Payment created successfully.", payment);
 });
 
@@ -192,11 +211,17 @@ export const getPayment = TryCatch(async (req, res) => {
 //update payment
 export const editPayment = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
-  const { amount, mode, transactionId, note, dueDate, paidAt ,isAdvance} = req.body;
+  const { amount, mode, transactionId, note, dueDate, paidAt, isAdvance } =
+    req.body;
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
 
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { fee: true },
+    include: { fee: true, student: { include: { currentBatch: true } } },
   });
 
   if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
@@ -228,9 +253,21 @@ export const editPayment = TryCatch(async (req, res) => {
     data: {
       balanceAmount: newBalance,
       status: newBalance === 0 ? "PAID" : "PENDING",
-      advanceAmount: isAdvance ? amount :null,
+      advanceAmount: isAdvance ? amount : null,
     },
   });
+  //create communication log
+  if (updatedPayment) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "PAYMENT_UPDATED",
+      new Date(),
+      "Payment Updated",
+      `Payment updated by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
+      payment.studentId || null,
+      userLocationId
+    );
+  }
 
   sendResponse(res, 200, true, "Payment recorded successfully", {
     payment: updatedPayment,
@@ -241,10 +278,14 @@ export const editPayment = TryCatch(async (req, res) => {
 //delete payment
 export const deletePayment = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
-    include: { fee: true },
+    include: { fee: true, student: { include: { currentBatch: true } } },
   });
 
   if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
@@ -253,7 +294,16 @@ export const deletePayment = TryCatch(async (req, res) => {
   await prisma.payment.delete({
     where: { id: paymentId },
   });
-
+  //create communication log
+  await addCommunicationLogEntry(
+    loggedById,
+    "PAYMENT_DELETED",
+    new Date(),
+    "Payment Deleted",
+    `Payment deleted by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
+    payment.studentId || null,
+    userLocationId
+  );
   sendResponse(res, 200, true, "Payment deleted successfully", payment);
 });
 
@@ -261,36 +311,73 @@ export const deletePayment = TryCatch(async (req, res) => {
 export const createPaymentDue = TryCatch(async (req, res) => {
   const { feeId } = req.params;
   const { amount, dueDate, note } = req.body;
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
 
+  // Check if fee exists
   const existingFee = await prisma.fee.findUnique({
     where: { id: feeId },
     include: {
       student: {
-        include: {
-          currentBatch: true,
-        },
+        include: { currentBatch: true },
       },
     },
   });
+
   if (!existingFee) {
     return sendResponse(res, 404, false, "Fee not found", null);
   }
-  const payment = await prisma.payment.create({
-    data: {
-      amount,
-      dueDate,
-      feeId,
-      note,
-      studentId: existingFee.studentId,
-    },
+
+  // add payment due and log communication in a transaction
+  const payment = await prisma.$transaction(async (tx) => {
+    // 1️⃣ Create payment due
+    const newPayment = await tx.payment.create({
+      data: {
+        amount,
+        dueDate,
+        note,
+        feeId,
+        studentId: existingFee.studentId,
+        status: "PENDING",
+      },
+    });
+
+    return newPayment;
   });
-  sendResponse(res, 200, true, "Payment due created successfully", payment);
+
+  //create communication log
+  if (payment) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "PAYMENT_DUE_CREATED",
+      new Date(),
+      "Payment Due Created",
+      `Payment due created by ${userName} for ${existingFee.student.name} (${existingFee.student.currentBatch.name})`,
+      payment.studentId || null,
+      userLocationId
+    );
+  }
+  return sendResponse(
+    res,
+    200,
+    true,
+    "Payment due created successfully",
+    payment
+  );
 });
 
 //edit payment due
 export const editPaymentDue = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
   const { amount, dueDate, note } = req.body;
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
   });
@@ -303,6 +390,18 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       note,
     },
   });
+  //create communication log
+  if (updatedPayment) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "PAYMENT_DUE_UPDATED",
+      new Date(),
+      "Payment Due Updated",
+      `Payment due updated by ${userName}`,
+      studentId || null,
+      userLocationId
+    );
+  }
   sendResponse(
     res,
     200,

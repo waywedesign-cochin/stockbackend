@@ -7,24 +7,25 @@ import {
   editPaymentDue,
   getPayment,
 } from "../controllers/paymentController.js";
+import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 const router = express.Router();
 
 //create payment
-router.post("/create-payment", createPayment);
+router.post("/create-payment", jwtMiddleware, createPayment);
 
 //get payment
 router.get("/get-payments/:studentId", getPayment);
 
 //update payment
-router.put("/update-payment/:paymentId", editPayment);
+router.put("/update-payment/:paymentId", jwtMiddleware, editPayment);
 
 //delete payment
-router.delete("/delete-payment/:paymentId", deletePayment);
+router.delete("/delete-payment/:paymentId", jwtMiddleware, deletePayment);
 
 //create payment due
-router.post("/create-payment-due/:feeId", createPaymentDue);
+router.post("/create-payment-due/:feeId", jwtMiddleware, createPaymentDue);
 
 //update payment due
-router.put("/update-payment-due/:paymentId", editPaymentDue);
+router.put("/update-payment-due/:paymentId", jwtMiddleware, editPaymentDue);
 
 export default router;

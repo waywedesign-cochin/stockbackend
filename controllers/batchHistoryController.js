@@ -2,17 +2,27 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
 import crypto from "crypto";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 export const switchBatch = TryCatch(async (req, res) => {
   const { studentId, fromBatchId, toBatchId, changeDate, reason, feeAction } =
     req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   // Validate student
   const student = await prisma.student.findUnique({ where: { id: studentId } });
   if (!student) return sendResponse(res, 404, false, "Student not found", null);
   if (student.currentBatchId !== fromBatchId)
     return sendResponse(res, 400, false, "Current batch mismatch", null);
 
+  // Validate source batch
+  const fromBatch = await prisma.batch.findUnique({
+    where: { id: fromBatchId },
+    include: { course: true },
+  });
   // Validate target batch
   const toBatch = await prisma.batch.findUnique({
     where: { id: toBatchId },
@@ -76,7 +86,17 @@ export const switchBatch = TryCatch(async (req, res) => {
         data: { currentCount: { increment: 1 } },
       }),
     ]);
-
+    if (batchHistory) {
+      await addCommunicationLogEntry(
+        loggedById,
+        "BATCH_SWITCHED",
+        new Date(),
+        "Batch Switched",
+        `Student ${student.name} has been transferred from batch ${fromBatch.name} to batch ${toBatch.name}. Switch processed by ${userName}.`,
+        student.id,
+        userLocationId
+      );
+    }
     return sendResponse(res, 200, true, "Batch switched successfully", {
       batchHistory,
       updatedFee,
@@ -137,7 +157,17 @@ export const switchBatch = TryCatch(async (req, res) => {
           where: { id: oldFee.id },
         }),
       ]);
-
+      if (batchHistory) {
+        await addCommunicationLogEntry(
+          loggedById,
+          "BATCH_SWITCHED",
+          new Date(),
+          "Batch Switched",
+          `Student ${student.name} has been transferred from batch ${fromBatch.name} to batch ${toBatch.name}. Switch processed by ${userName}.`,
+          student.id,
+          userLocationId
+        );
+      }
       return sendResponse(res, 200, true, "Batch switched successfully", {
         batchHistory,
         oldFee: updatedOldFee,
@@ -197,7 +227,17 @@ export const switchBatch = TryCatch(async (req, res) => {
           data: { currentCount: { increment: 1 } },
         }),
       ]);
-
+      if (batchHistory) {
+        await addCommunicationLogEntry(
+          loggedById,
+          "BATCH_SWITCHED",
+          new Date(),
+          "Batch Switched",
+          `Student ${student.name} has been transferred from batch ${fromBatch.name} to batch ${toBatch.name}. Switch processed by ${userName}.`,
+          student.id,
+          userLocationId
+        );
+      }
       return sendResponse(res, 200, true, "Batch switched (SPLIT mode)", {
         batchHistory,
         oldFee: updatedOldFee,
