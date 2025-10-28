@@ -10,6 +10,7 @@ import feeRouter from "./routes/fee.js";
 import paymentRouter from "./routes/payment.js";
 import batchHistoryRouter from "./routes/batchHistory.js";
 import cashbookRouter from "./routes/cashbook.js";
+import directorLedgerRouter from "./routes/directorLedger.js";
 
 //due reminder cron job
 import "./utils/dueReminderCron.js";
@@ -47,6 +48,7 @@ app.use("/api/fee", feeRouter);
 app.use("/api/payment", paymentRouter);
 app.use("/api/batch-history", batchHistoryRouter);
 app.use("/api/cashbook", cashbookRouter);
+app.use("/api/director-ledger", directorLedgerRouter);
 
 const port = process.env.PORT || 3001;
 
