@@ -79,7 +79,7 @@ export const addStudent = TryCatch(async (req, res) => {
     return sendResponse(res, 500, false, "Failed to add fee", null);
   }
 
-  if (student & fee) {
+  if (student) {
     await addCommunicationLogEntry(
       loggedById,
       "STUDENT_ADDED",

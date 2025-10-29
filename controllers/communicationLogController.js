@@ -36,17 +36,27 @@ export const addCommunicationLogEntry = async (
 
 //get communication logs by studentId,userId,locationId
 export const getCommunicationLogs = TryCatch(async (req, res) => {
-  const { studentId, loggedById, locationId, year, month } = req.query;
+  const { studentId, loggedById, locationId, year, month, search } = req.query;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
 
   const logFilter = { locationId };
   if (studentId) logFilter.studentId = studentId;
   if (loggedById) logFilter.loggedById = loggedById;
+  if (search) {
+    logFilter.OR = [
+      { subject: { contains: search, mode: "insensitive" } },
+      { message: { contains: search, mode: "insensitive" } },
+    ];
+  }
   if (year && month) {
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 1);
     logFilter.date = { gte: startDate, lt: endDate };
   }
-
+  const totalCount = await prisma.communicationLog.count({ where: logFilter });
+  const totalPages = Math.ceil(totalCount / limit);
   const communicationLogs = await prisma.communicationLog.findMany({
     where: logFilter,
     include: {
@@ -72,14 +82,18 @@ export const getCommunicationLogs = TryCatch(async (req, res) => {
     orderBy: {
       date: "desc",
     },
+    skip,
+    take: limit,
   });
-  sendResponse(
-    res,
-    200,
-    true,
-    "Communication logs fetched successfully",
-    communicationLogs
-  );
+  sendResponse(res, 200, true, "Communication logs fetched successfully", {
+    communicationLogs,
+    pagination: {
+      currentPage: page,
+      limit,
+      totalPages,
+      totalCount,
+    },
+  });
 });
 
 //update communication log

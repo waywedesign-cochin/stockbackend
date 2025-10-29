@@ -50,7 +50,7 @@ app.use("/api/payment", paymentRouter);
 app.use("/api/batch-history", batchHistoryRouter);
 app.use("/api/cashbook", cashbookRouter);
 app.use("/api/director-ledger", directorLedgerRouter);
-app.use("/api/communication-log", communicationLogRouter);
+app.use("/api/communication", communicationLogRouter);
 const port = process.env.PORT || 3001;
 
 app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
