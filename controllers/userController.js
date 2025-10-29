@@ -54,7 +54,12 @@ export const login = TryCatch(async (req, res) => {
   }
 
   const token = jwt.sign(
-    { id: user.id, role: user.role },
+    {
+      userId: user.id,
+      role: user.role,
+      name: user.username,
+      locationId: user.locationId,
+    },
     process.env.JWT_SECRET,
     { expiresIn: "1d" }
   );
@@ -71,7 +76,7 @@ export const getCurrentUser = TryCatch(async (req, res) => {
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: req.user.id },
+    where: { id: req.user.userId },
     include: { location: true }, // include relations if needed
   });
 

@@ -14,29 +14,31 @@ datasource db {
 }
 
 model User {
-  id             String           @id @default(uuid())
-  username       String
-  email          String           @unique
-  password       String
-  role           Int              @default(4) // 1: admin, 2: director, 3:staff, 4: guest
-  location       Location?        @relation(fields: [locationId], references: [id])
-  locationId     String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  cashbook       cashbook[]
-  DirectorLedger DirectorLedger[]
+  id               String             @id @default(uuid())
+  username         String
+  email            String             @unique
+  password         String
+  role             Int                @default(4) // 1: admin, 2: director, 3:staff, 4: guest
+  location         Location?          @relation(fields: [locationId], references: [id])
+  locationId       String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  cashbook         cashbook[]
+  DirectorLedger   DirectorLedger[]
+  CommunicationLog CommunicationLog[]
 }
 
 model Location {
-  id             String           @id @default(uuid())
-  name           String           @unique
-  address        String?
-  batches        Batch[]
-  users          User[]
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  cashbook       cashbook[]
-  DirectorLedger DirectorLedger[]
+  id               String             @id @default(uuid())
+  name             String             @unique
+  address          String?
+  batches          Batch[]
+  users            User[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  cashbook         cashbook[]
+  DirectorLedger   DirectorLedger[]
+  CommunicationLog CommunicationLog[]
 
   @@map("locations")
 }
@@ -110,11 +112,12 @@ model Student {
   fees     Fee[]
   payments Payment[]
 
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  batchHistory   batchHistory[]
-  cashbook       cashbook[]
-  DirectorLedger DirectorLedger[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  batchHistory     batchHistory[]
+  cashbook         cashbook[]
+  DirectorLedger   DirectorLedger[]
+  CommunicationLog CommunicationLog[]
 
   @@map("students")
 }
@@ -236,4 +239,23 @@ model DirectorLedger {
   updatedAt DateTime @updatedAt
 
   @@map("director_ledgers")
+}
+
+model CommunicationLog {
+  id         String    @id @default(cuid())
+  date       DateTime  @default(now())
+  loggedBy   User      @relation(fields: [loggedById], references: [id])
+  loggedById String // staff/director/admin who created the log
+  type       String // "Call", "Message", "Note", "Reminder"
+  subject    String?
+  message    String
+  student    Student?  @relation(fields: [studentId], references: [id])
+  studentId  String?
+  batchId    String?
+  location   Location? @relation(fields: [locationId], references: [id])
+  locationId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("communication_logs")
 }

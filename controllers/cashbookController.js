@@ -1,6 +1,7 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //add cashbbook entry
 export const addCashbookEntry = TryCatch(async (req, res) => {
@@ -14,7 +15,11 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     studentId,
     directorId,
   } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const result = await prisma.$transaction(async (tx) => {
     // create cashbook entry
     const newEntry = await tx.cashbook.create({
@@ -94,6 +99,15 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
 
   if (!result)
     return sendResponse(res, 400, false, "Transaction failed or incomplete");
+  await addCommunicationLogEntry(
+    loggedById,
+    "CASHBOOK_ENTRY_ADDED",
+    new Date(),
+    "Cashbook Entry Added",
+    `A new cashbook entry has been added by ${userName}.`,
+    studentId || directorId || null,
+    userLocationId
+  );
 
   // Success response
   return sendResponse(
@@ -223,6 +237,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
 
   const entries = await prisma.cashbook.findMany({
     where: cashbookFilter,
+    include: { student: { include: { currentBatch: true } }, director: true },
     skip,
     take: pageSize,
     orderBy: { transactionDate: "desc" },
@@ -261,7 +276,8 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
   });
 });
 
-//update cashbook entry
+//-------------------------update cashbook entry-------------------------------
+
 export const updateCashbookEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
   const {
@@ -272,7 +288,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     referenceId,
     studentId,
   } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const existing = await prisma.cashbook.findUnique({
     where: { id },
     include: { student: { include: { fees: true } } },
@@ -365,6 +385,18 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       // return so Prisma can commit and give it back
       return entry;
     });
+    if (!newEntry)
+      return sendResponse(res, 400, false, "Transaction failed or incomplete");
+
+    await addCommunicationLogEntry(
+      loggedById,
+      "CASHBOOK_ENTRY_UPDATED",
+      new Date(),
+      "Cashbook entry updated",
+      `Cashbook entry updated by ${userName}, student changed.`,
+      studentId || null,
+      userLocationId
+    );
 
     return sendResponse(
       res,
@@ -387,16 +419,86 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       referenceId,
     },
   });
-
+  if (!updatedEntry)
+    return sendResponse(res, 400, false, "Cashbook entry update failed");
+  //create communication log
+  await addCommunicationLogEntry(
+    loggedById,
+    "CASHBOOK_ENTRY_UPDATED",
+    new Date(),
+    "Cashbook entry updated",
+    `Cashbook entry updated by ${userName}.`,
+    studentId || null,
+    userLocationId
+  );
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
 //delete cashbook entry
 export const deleteCashbookEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const entry = await prisma.cashbook.findUnique({ where: { id } });
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+  const entry = await prisma.cashbook.findUnique({
+    where: { id },
+    include: { student: { include: { fees: true } } },
+  });
+
   if (!entry)
     return sendResponse(res, 404, false, "Cashbook entry not found", null);
+
+  // if linked to student, reverse fee and payment
+  if (entry.studentId) {
+    await prisma.$transaction(async (tx) => {
+      // 1️⃣ Reverse fee update for old student
+      if (entry.student) {
+        const oldFee = entry.student.fees[0];
+        if (oldFee) {
+          await tx.fee.update({
+            where: { id: oldFee.id },
+            data: {
+              balanceAmount: oldFee.balanceAmount + entry.amount,
+              status: "PENDING",
+            },
+          });
+
+          await tx.payment.deleteMany({
+            where: {
+              studentId: entry.studentId,
+              amount: entry.amount,
+              feeId: oldFee.id,
+            },
+          });
+        }
+      }
+
+      // 2️⃣ Delete old cashbook entry
+      await tx.cashbook.delete({ where: { id } });
+    });
+    //create communication log
+    await addCommunicationLogEntry(
+      loggedById,
+      "CASHBOOK_ENTRY_DELETED",
+      new Date(),
+      "Cashbook entry deleted",
+      `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
+      entry.studentId || entry.directorId || null,
+      userLocationId
+    );
+  }
   await prisma.cashbook.delete({ where: { id } });
+  //create communication log
+  await addCommunicationLogEntry(
+    loggedById,
+    "CASHBOOK_ENTRY_DELETED",
+    new Date(),
+    "Cashbook entry deleted",
+    `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
+    entry.studentId || entry.directorId || null,
+    userLocationId
+  );
   sendResponse(res, 200, true, "Entry deleted successfully", null);
 });

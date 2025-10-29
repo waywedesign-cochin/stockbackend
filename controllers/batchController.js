@@ -1,6 +1,7 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //add batch
 export const addBatch = TryCatch(async (req, res) => {
@@ -16,25 +17,48 @@ export const addBatch = TryCatch(async (req, res) => {
     currentCount,
     description,
   } = req.body;
-  const batch = await prisma.batch.create({
-    data: {
-      name,
-      year,
-      startDate: new Date(startDate),
-      locationId,
-      courseId,
-      tutor,
-      coordinator,
-      slotLimit,
-      currentCount,
-      description,
-    },
-    include: {
-      location: true,
-      course: true,
-      students: true,
-    },
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+
+  const batch = await prisma.$transaction(async (tx) => {
+    const newBatch = await prisma.batch.create({
+      data: {
+        name,
+        year,
+        startDate: new Date(startDate),
+        locationId,
+        courseId,
+        tutor,
+        coordinator,
+        slotLimit,
+        currentCount,
+        description,
+      },
+      include: {
+        location: true,
+        course: true,
+        students: true,
+      },
+    });
+
+    return newBatch;
   });
+  if (batch) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "BATCH_ADDED",
+      new Date(),
+      "Batch Added",
+      `Batch ${name} has been added by ${userName}.`,
+      null,
+      userLocationId,
+      batch.id
+    );
+  }
+
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
 
@@ -158,30 +182,71 @@ export const updateBatch = TryCatch(async (req, res) => {
     status,
     description,
   } = req.body;
-  const batch = await prisma.batch.update({
-    where: { id },
-    data: {
-      name,
-      year,
-      startDate: new Date(startDate),
-      locationId,
-      courseId,
-      tutor,
-      coordinator,
-      slotLimit,
-      currentCount,
-      status,
-      description,
-    },
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+
+  const batch = await prisma.$transaction(async (tx) => {
+    const updatedBatch = await prisma.batch.update({
+      where: { id },
+      data: {
+        name,
+        year,
+        startDate: new Date(startDate),
+        locationId,
+        courseId,
+        tutor,
+        coordinator,
+        slotLimit,
+        currentCount,
+        status,
+        description,
+      },
+    });
+
+    return updatedBatch;
   });
+  if (batch) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "BATCH_UPDATED",
+      new Date(),
+      "Batch Updated",
+      `Batch ${name} has been updated by ${userName}.`,
+      null,
+      userLocationId,
+      batch.id
+    );
+  }
   sendResponse(res, 200, true, "Batch updated successfully", batch);
 });
 
 //delete batch
 export const deleteBatch = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const batch = await prisma.batch.delete({
-    where: { id },
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+  await prisma.$transaction(async (tx) => {
+    const batch = await prisma.batch.delete({
+      where: { id },
+    });
+
+    await addCommunicationLogEntry(
+      loggedById,
+      "BATCH_DELETED",
+      new Date(),
+      "Batch Deleted",
+      `Batch ${batch.name} has been deleted by ${userName}.`,
+      null,
+      userLocationId,
+      batch.id
+    );
+    return batch;
   });
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });

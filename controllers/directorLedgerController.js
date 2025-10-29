@@ -1,6 +1,7 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //add entry
 export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
@@ -14,7 +15,11 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     studentId,
     directorId,
   } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const result = await prisma.$transaction(async (tx) => {
     // Create director ledger entry
     const newEntry = await tx.directorLedger.create({
@@ -83,7 +88,16 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
 
   // final response
   if (!result) return;
-
+  // Add communication log entry
+  await addCommunicationLogEntry(
+    loggedById,
+    "DIRECTOR_LEDGER_ENTRY_ADDED",
+    new Date(),
+    "Director Ledger Entry Added",
+    `A new director ledger entry has been added by ${userName}.`,
+    studentId || directorId || null,
+    userLocationId
+  );
   return sendResponse(res, 200, true, "Entry added successfully", result);
 });
 
@@ -212,7 +226,11 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     referenceId,
     studentId, // optional — if linked to a student
   } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   const existing = await prisma.directorLedger.findUnique({
     where: { id },
     include: { student: { include: { fees: true } } },
@@ -309,7 +327,17 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
 
       return entry;
     });
-
+    if (!newEntry)
+      return sendResponse(res, 400, false, "Transaction failed or incomplete");
+    await addCommunicationLogEntry(
+      loggedById,
+      "DIRECTOR_LEDGER_ENTRY_UPDATED",
+      new Date(),
+      "Director ledger entry updated",
+      `Director ledger entry updated by ${userName}, student changed.`,
+      studentId || null,
+      userLocationId
+    );
     return sendResponse(
       res,
       200,
@@ -331,14 +359,34 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       referenceId,
     },
   });
-
+  if (!updatedEntry)
+    return sendResponse(res, 400, false, "Cashbook entry update failed");
+  //create communication log
+  await addCommunicationLogEntry(
+    loggedById,
+    "DIRECTOR_LEDGER_ENTRY_UPDATED",
+    new Date(),
+    "Director ledger entry updated",
+    `Director ledger entry updated by ${userName}.`,
+    studentId || null,
+    userLocationId
+  );
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
 //delete entry
 export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const entry = await prisma.directorLedger.findUnique({ where: { id } });
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+  const entry = await prisma.directorLedger.findUnique({
+    where: { id },
+    include: { student: { include: { fees: true } } },
+  });
+
   if (!entry)
     return sendResponse(
       res,
@@ -347,7 +395,66 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       "Director ledger entry not found",
       null
     );
-  await prisma.cashbook.delete({ where: { id } });
+
+  // if linked to student, reverse fee and payment
+  if (entry.studentId) {
+    await prisma.$transaction(async (tx) => {
+      // 1️⃣ Reverse fee update for old student
+      if (entry.student) {
+        const oldFee = entry.student.fees[0];
+        if (oldFee) {
+          await tx.fee.update({
+            where: { id: oldFee.id },
+            data: {
+              balanceAmount: oldFee.balanceAmount + entry.amount,
+              status: "PENDING",
+            },
+          });
+
+          await tx.payment.deleteMany({
+            where: {
+              studentId: entry.studentId,
+              amount: entry.amount,
+              feeId: oldFee.id,
+            },
+          });
+        }
+      }
+
+      // 2️⃣ Delete old cashbook entry
+      await tx.directorLedger.delete({ where: { id } });
+    });
+    //create communication log
+    await addCommunicationLogEntry(
+      loggedById,
+      "DIRECTOR_LEDGER_ENTRY_DELETED",
+      new Date(),
+      "Director ledger entry deleted",
+      `Director ledger entry deleted by ${userName}, student changed.`,
+      entry.studentId || null,
+      userLocationId
+    );
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Old entry removed and new entry created with updated student",
+      null
+    );
+  }
+
+  await prisma.directorLedger.delete({ where: { id } });
+  
+  //create communication log
+  await addCommunicationLogEntry(
+    loggedById,
+    "DIRECTOR_LEDGER_ENTRY_DELETED",
+    new Date(),
+    "Director ledger entry deleted",
+    `Director ledger entry deleted by ${userName}.`,
+    null,
+    userLocationId
+  );
   sendResponse(
     res,
     200,

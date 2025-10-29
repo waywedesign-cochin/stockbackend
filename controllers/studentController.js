@@ -1,6 +1,7 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../prismaClient.js";
+import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //add student
 export const addStudent = TryCatch(async (req, res) => {
@@ -13,9 +14,13 @@ export const addStudent = TryCatch(async (req, res) => {
     salesperson,
     isFundedAccount,
     currentBatchId,
-    referralInfo
+    referralInfo,
   } = req.body;
-
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
   // 1️⃣ Create Student
   const student = await prisma.student.create({
     data: {
@@ -27,7 +32,7 @@ export const addStudent = TryCatch(async (req, res) => {
       salesperson,
       isFundedAccount,
       currentBatchId,
-      referralInfo
+      referralInfo,
     },
     include: {
       currentBatch: {
@@ -72,6 +77,18 @@ export const addStudent = TryCatch(async (req, res) => {
   });
   if (!fee) {
     return sendResponse(res, 500, false, "Failed to add fee", null);
+  }
+
+  if (student & fee) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "STUDENT_ADDED",
+      new Date(),
+      "Student Added",
+      `A new student ${student.name} to ${student.currentBatch.name} has been added by ${userName} and fee has been created.`,
+      student.id,
+      userLocationId
+    );
   }
 
   sendResponse(res, 200, true, "Student added successfully with fee", {
@@ -484,8 +501,19 @@ export const updateStudent = TryCatch(async (req, res) => {
     salesperson,
     isFundedAccount,
     currentBatchId,
-    referralInfo
+    referralInfo,
   } = req.body;
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+
+  const existingStudent = await prisma.student.findUnique({
+    where: { id: id },
+    include: { currentBatch: true },
+  });
+
   const student = await prisma.student.update({
     where: { id: id },
     data: {
@@ -497,7 +525,7 @@ export const updateStudent = TryCatch(async (req, res) => {
       salesperson,
       isFundedAccount,
       currentBatchId,
-      referralInfo
+      referralInfo,
     },
     include: {
       currentBatch: {
@@ -515,14 +543,31 @@ export const updateStudent = TryCatch(async (req, res) => {
       },
     },
   });
+
+  //add communication log
+  if (student) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "STUDENT_UPDATED",
+      new Date(),
+      "Student updated",
+      `Student ${student.name} (${existingStudent.currentBatch.name}) details has been updated by ${userName}.`,
+      null,
+      userLocationId
+    );
+  }
   sendResponse(res, 200, true, "Student updated successfully", student);
 });
 
 //Delete student
 export const deleteStudent = TryCatch(async (req, res) => {
   const { id } = req.params;
-
-  await prisma.$transaction(async (prisma) => {
+  const {
+    userId: loggedById,
+    locationId: userLocationId,
+    name: userName,
+  } = req.user;
+  const result = await prisma.$transaction(async (prisma) => {
     // Delete payments
     await prisma.payment.deleteMany({ where: { studentId: id } });
 
@@ -547,8 +592,23 @@ export const deleteStudent = TryCatch(async (req, res) => {
     }
 
     // Delete student
-    await prisma.student.delete({ where: { id } });
+    const deletedStudent = await prisma.student.delete({
+      where: { id },
+      include: { currentBatch: true },
+    });
+    return deletedStudent;
   });
-
+  //add communication log
+  if (result) {
+    await addCommunicationLogEntry(
+      loggedById,
+      "STUDENT_DELETED",
+      new Date(),
+      "Student deleted",
+      `Student ${result.name} (${result.currentBatch.name}) has been deleted by ${userName}.`,
+      null,
+      userLocationId
+    );
+  }
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
