@@ -65,6 +65,7 @@ export const getCommunicationLogs = TryCatch(async (req, res) => {
           id: true,
           name: true,
           email: true,
+          admissionNo: true,
           currentBatch: {
             select: {
               id: true,
