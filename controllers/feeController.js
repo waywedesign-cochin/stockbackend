@@ -186,7 +186,7 @@ export const updateFee = TryCatch(async (req, res) => {
     new Date(),
     "Fee Updated",
     `Fee updated by ${userName} for ${existingFee.student.name} (${existingFee.student.currentBatch.name}). All scheduled payments have been reset.`,
-    studentId || null,
+    existingFee?.studentId || null,
     userLocationId
   );
 

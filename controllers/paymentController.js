@@ -250,12 +250,26 @@ export const editPayment = TryCatch(async (req, res) => {
 
   const updatedFee = await prisma.fee.update({
     where: { id: payment.feeId },
+    include: { student: true },
     data: {
       balanceAmount: newBalance,
       status: newBalance === 0 ? "PAID" : "PENDING",
       advanceAmount: isAdvance ? amount : null,
     },
   });
+  
+  //send slot booking email if isAdvance is true
+  if (isAdvance) {
+    try {
+      await sendSlotBookingEmail(updatedFee);
+      console.log(
+        `Slot booking email sent for student ${updatedFee.student.name}`
+      );
+    } catch (err) {
+      console.error("Error sending slot booking email:", err);
+    }
+  }
+
   //create communication log
   if (updatedPayment) {
     await addCommunicationLogEntry(
