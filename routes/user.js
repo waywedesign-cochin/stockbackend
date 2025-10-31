@@ -7,6 +7,9 @@ import {
   updateUser,
   getCurrentUser,
   deleteUser,
+  changePassword,
+  forgotPassword,
+  resetPassword,
 } from "../controllers/userController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 
@@ -31,6 +34,15 @@ router.get("/get-user/:id", getUser);
 router.put("/update-user/:id", updateUser);
 
 //delete user
-router.delete("/delete-user/:id",deleteUser)
+router.delete("/delete-user/:id", deleteUser);
+
+//change password
+router.post("/change-password", jwtMiddleware, changePassword);
+
+//forgot password
+router.post("/forgot-password", forgotPassword);
+
+//reset password
+router.post("/reset-password", resetPassword);
 
 export default router;
