@@ -3,6 +3,8 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
+import { sendPasswordResetEmail } from "../utils/sendPasswordResetEmail.js";
 //signup
 export const signUp = TryCatch(async (req, res) => {
   const { username, email, password } = req.body;
@@ -140,4 +142,96 @@ export const deleteUser = TryCatch(async (req, res) => {
     where: { id },
   });
   sendResponse(res, 200, true, "User deleted successfully", user);
+});
+
+//change password
+export const changePassword = TryCatch(async (req, res) => {
+  const { userId } = req.user;
+  const { currentPassword, newPassword } = req.body;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+  if (!user) {
+    return sendResponse(res, 404, false, "User not found", null);
+  }
+  const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isPasswordValid) {
+    return sendResponse(res, 400, false, "Invalid current password", null);
+  }
+  const isSamePassword = await bcrypt.compare(newPassword, user.password);
+  if (isSamePassword) {
+    return sendResponse(
+      res,
+      400,
+      false,
+      "New password cannot be same as old password",
+      null
+    );
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      password: hashedPassword,
+    },
+  });
+  sendResponse(res, 200, true, "Password changed successfully", updatedUser);
+});
+
+//forgot password
+export const forgotPassword = TryCatch(async (req, res) => {
+  const { email } = req.body;
+  const user = await prisma.user.findUnique({
+    where: { email },
+  });
+  if (!user) {
+    return sendResponse(res, 404, false, "User not found", null);
+  }
+  const resetToken = crypto.randomBytes(20).toString("hex");
+  const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+  await prisma.user.update({
+    where: { email },
+    data: {
+      resetPasswordToken: resetToken,
+      resetPasswordExpires: resetTokenExpiry,
+    },
+  });
+
+  const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+  if (resetLink) {
+    sendPasswordResetEmail(user, resetLink);
+  }
+  sendResponse(res, 200, true, "Password reset link sent successfully", {
+    resetLink,
+  });
+});
+
+//reset password
+export const resetPassword = TryCatch(async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  const user = await prisma.user.findFirst({
+    where: {
+      resetPasswordToken: token,
+      resetPasswordExpires: { gte: new Date() }, // valid and not expired
+    },
+  });
+
+  if (!user) {
+    return sendResponse(res, 400, false, "Invalid or expired token", null);
+  }
+
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null,
+    },
+  });
+
+  sendResponse(res, 200, true, "Password reset successful", null);
 });
