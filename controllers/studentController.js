@@ -612,3 +612,90 @@ export const deleteStudent = TryCatch(async (req, res) => {
   }
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
+
+//get students revenue
+export const getStudentsRevenue = TryCatch(async (req, res) => {
+  const { year, quarter, locationId } = req.query;
+
+  const quarterMonths = {
+    Q1: [1, 2, 3],
+    Q2: [4, 5, 6],
+    Q3: [7, 8, 9],
+    Q4: [10, 11, 12],
+  };
+
+  const months =
+    quarter && quarter !== "ALL"
+      ? quarterMonths[quarter]
+      : Array.from({ length: 12 }, (_, i) => i + 1);
+
+  const locationFilter =
+    locationId && locationId !== "all" ? { locationId } : {};
+
+  const numericYear = parseInt(year, 10);
+
+  // --- Step 1: Get all fees in one go ---
+  const allFees = await prisma.fee.findMany({
+    where: {
+      student: { ...locationFilter },
+      createdAt: {
+        gte: new Date(numericYear, 0, 1), // ✅ Jan 1st of selected year
+        lt: new Date(numericYear + 1, 0, 1), // ✅ Jan 1st of next year
+      },
+    },
+    select: { finalFee: true, createdAt: true },
+  });
+
+  // --- Step 2: Get all payments in one go ---
+  const allPayments = await prisma.payment.findMany({
+    where: {
+      student: { ...locationFilter },
+      createdAt: {
+        gte: new Date(numericYear, 0, 1),
+        lt: new Date(numericYear + 1, 0, 1),
+      },
+    },
+    select: { amount: true, status: true, createdAt: true },
+  });
+
+  const monthNames = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const monthlyData = months.map((month) => {
+    const fees = allFees.filter(
+      (f) => new Date(f.createdAt).getMonth() + 1 === month
+    );
+    const payments = allPayments.filter(
+      (p) => new Date(p.createdAt).getMonth() + 1 === month
+    );
+
+    const revenue = fees.reduce((acc, f) => acc + (f.finalFee || 0), 0);
+    const collections = payments
+      .filter((p) => p.status === "PAID")
+      .reduce((acc, p) => acc + (p.amount || 0), 0);
+    const outstanding = payments
+      .filter((p) => p.status === "PENDING")
+      .reduce((acc, p) => acc + (p.amount || 0), 0);
+
+    return {
+      month: monthNames[month - 1],
+      revenue,
+      collections,
+      outstanding,
+    };
+  });
+
+  sendResponse(res, 200, true, "Students revenue summary fetched", monthlyData);
+});
