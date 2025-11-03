@@ -3,6 +3,7 @@ import {
   addBatch,
   deleteBatch,
   getBatches,
+  getBatchesReport,
   updateBatch,
 } from "../controllers/batchController.js";
 import { authorizeRoles } from "../middlewares/roleMiddleware.js";
@@ -20,5 +21,8 @@ router.put("/update-batch/:id", jwtMiddleware, updateBatch);
 
 //delete batch
 router.delete("/delete-batch/:id", jwtMiddleware, deleteBatch);
+
+//get report
+router.get("/batch-performance",jwtMiddleware, getBatchesReport);
 
 export default router;

@@ -250,3 +250,73 @@ export const deleteBatch = TryCatch(async (req, res) => {
   });
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });
+
+//get batch report
+export const getBatchesReport = TryCatch(async (req, res) => {
+  const { locationId, year, quarter } = req.query;
+
+  // 🧮 Define quarter months
+  const quarterMonths = {
+    Q1: [1, 2, 3],
+    Q2: [4, 5, 6],
+    Q3: [7, 8, 9],
+    Q4: [10, 11, 12],
+  };
+
+  // 🗓️ Build date range based on year & quarter
+  let dateFilter = {};
+  if (year) {
+    const months = quarter && quarter !== "ALL" ? quarterMonths[quarter] : null;
+    const startDate = new Date(year, months ? months[0] - 1 : 0, 1);
+    const endDate = new Date(
+      year,
+      months ? months[months.length - 1] : 11,
+      31,
+      23,
+      59,
+      59
+    );
+
+    dateFilter = {
+      createdAt: { gte: startDate, lte: endDate },
+    };
+  }
+
+  // 📦 Build base filter
+  const filter = {
+    status: "ACTIVE",
+    ...(locationId && locationId !== "all" && { locationId }),
+    ...(year && dateFilter),
+  };
+
+  // 🧠 Fetch batches
+  const batches = await prisma.batch.findMany({
+    where: filter,
+    select: {
+      id: true,
+      name: true,
+      slotLimit: true,
+      currentCount: true,
+      createdAt: true,
+    },
+  });
+
+  // 📊 Format response
+  const batchPerformance = batches.map((batch) => {
+    const capacity = batch.slotLimit || 0;
+    const enrolled = batch.currentCount || 0;
+    const completionRate =
+      capacity > 0 ? Number(((enrolled / capacity) * 100).toFixed(2)) : 0;
+
+    return {
+      batchName: batch.name,
+      capacity,
+      enrolled,
+      completionRate, 
+    };
+  });
+
+  sendResponse(res, 200, true, "Batch report fetched successfully", {
+    batchPerformance,
+  });
+});

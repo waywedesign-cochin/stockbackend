@@ -257,7 +257,7 @@ export const editPayment = TryCatch(async (req, res) => {
       advanceAmount: isAdvance ? amount : null,
     },
   });
-  
+
   //send slot booking email if isAdvance is true
   if (isAdvance) {
     try {
@@ -422,5 +422,64 @@ export const editPaymentDue = TryCatch(async (req, res) => {
     true,
     "Payment due updated successfully",
     updatedPayment
+  );
+});
+
+//get payment type report
+export const getPaymentTypeReport = TryCatch(async (req, res) => {
+  const { locationId } = req.query;
+
+  // Fetch payments with optional location filter
+  const whereClause = { paidAt: { not: null } };
+  if (locationId && locationId !== "ALL") {
+    whereClause.fee = {
+      batch: {
+        locationId: locationId,
+      },
+    };
+  }
+
+  const payments = await prisma.payment.findMany({
+    where: whereClause,
+    select: {
+      id: true,
+      mode: true,
+      amount: true,
+      fee: {
+        select: {
+          batch: {
+            select: {
+              locationId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  // Group payments by mode (cash, card, UPI, etc.)
+  const paymentTypeMap = {};
+
+  for (const payment of payments) {
+    const mode = payment.mode || "Unknown";
+    if (!paymentTypeMap[mode]) {
+      paymentTypeMap[mode] = 0;
+    }
+    paymentTypeMap[mode] += payment.amount || 0;
+  }
+
+  // Convert to chart-friendly array
+  const paymentTypeReport = Object.entries(paymentTypeMap).map(
+    ([name, value]) => ({
+      name, // e.g. "Cash", "Card", "UPI"
+      value, // Total amount for this mode
+    })
+  );
+
+  return sendResponse(
+    res,
+    200,
+    true,
+    "Payment type report fetched successfully",
+    { paymentTypeReport }
   );
 });

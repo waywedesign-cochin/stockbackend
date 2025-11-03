@@ -3,6 +3,7 @@ import {
   addLocation,
   deleteLocation,
   getLocations,
+  getLocationWiseReport,
   updateLocation,
 } from "../controllers/locationController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
@@ -20,4 +21,6 @@ router.put("/update-location/:id", jwtMiddleware, updateLocation);
 //delete location
 router.delete("/delete-location/:id", jwtMiddleware, deleteLocation);
 
+//get location wise revenue
+router.get("/locations-comparison",jwtMiddleware, getLocationWiseReport);
 export default router;

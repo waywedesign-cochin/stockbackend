@@ -6,6 +6,7 @@ import {
   editPayment,
   editPaymentDue,
   getPayment,
+  getPaymentTypeReport,
 } from "../controllers/paymentController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 const router = express.Router();
@@ -27,5 +28,8 @@ router.post("/create-payment-due/:feeId", jwtMiddleware, createPaymentDue);
 
 //update payment due
 router.put("/update-payment-due/:paymentId", jwtMiddleware, editPaymentDue);
+
+//payment type report
+router.get("/payment-type-report",jwtMiddleware, getPaymentTypeReport);
 
 export default router;

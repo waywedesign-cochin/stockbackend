@@ -99,7 +99,6 @@ export const switchBatch = TryCatch(async (req, res) => {
     }
     return sendResponse(res, 200, true, "Batch switched successfully", {
       batchHistory,
-      updatedFee,
       transferId,
     });
   }
@@ -123,7 +122,7 @@ export const switchBatch = TryCatch(async (req, res) => {
       const [updatedOldFee, batchHistory] = await prisma.$transaction([
         prisma.fee.update({
           where: { id: oldFee.id },
-          data: { status: "INACTIVE" },
+          data: { status: "CANCELLED" },
         }),
         prisma.batchHistory.create({
           data: {

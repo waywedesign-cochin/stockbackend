@@ -22,6 +22,6 @@ router.put("/update-student/:id", jwtMiddleware, updateStudent);
 router.delete("/delete-student/:id", jwtMiddleware, deleteStudent);
 
 //get revenue details
-router.get("/revenue-details", getStudentsRevenue);
+router.get("/revenue-details",jwtMiddleware, getStudentsRevenue);
 
 export default router;
