@@ -103,30 +103,15 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
 
 //------------------------------get entries with filters------------------------------------
 export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
-  const {
-    locationId,
-    directorId,
-    month,
-    year,
-    search,
-    transactionType,
-    page,
-    limit,
-  } = req.query;
-
-  if (!locationId || !directorId) {
-    return res.status(400).json({
-      success: false,
-      message: "locationId and directorId are required",
-    });
-  }
+  const { directorId, month, year, search, transactionType, page, limit } =
+    req.query;
 
   const pageNumber = parseInt(page) || 1;
   const pageSize = parseInt(limit) || 10;
   const skip = (pageNumber - 1) * pageSize;
 
   // ---------- Period Filter ----------
-  const periodFilter = { locationId, directorId };
+  const periodFilter = { directorId };
 
   if (year) {
     if (month && month !== "allmonths") {
@@ -444,7 +429,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
   }
 
   await prisma.directorLedger.delete({ where: { id } });
-  
+
   //create communication log
   await addCommunicationLogEntry(
     loggedById,
