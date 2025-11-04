@@ -1,6 +1,6 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
-import prisma from "../prismaClient.js";
+import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
 
 //add cashbbook entry

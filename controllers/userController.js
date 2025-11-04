@@ -1,4 +1,4 @@
-import prisma from "../prismaClient.js";
+import prisma from "../config/prismaClient.js";
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import bcrypt from "bcrypt";
