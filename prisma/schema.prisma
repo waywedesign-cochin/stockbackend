@@ -224,7 +224,7 @@ model cashbook {
 
 model DirectorLedger {
   id              String   @id @default(uuid())
-  director        User     @relation(fields: [directorId], references: [id])
+  director        User?     @relation(fields: [directorId], references: [id])
   directorId      String
   transactionDate DateTime
   transactionType String // 'STUDENT_PAID' | 'OTHER_EXPENSE' | 'FROM_OFFICE' | 'OWNER_TAKEN' 

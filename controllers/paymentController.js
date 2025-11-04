@@ -1,6 +1,6 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
-import prisma from "../prismaClient.js";
+import prisma from "../config/prismaClient.js";
 import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
 

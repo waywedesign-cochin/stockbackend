@@ -1,7 +1,12 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
-import prisma from "../prismaClient.js";
+import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 
 //add student
 export const addStudent = TryCatch(async (req, res) => {
@@ -90,7 +95,9 @@ export const addStudent = TryCatch(async (req, res) => {
       userLocationId
     );
   }
-
+  //clear redis cache for student and revenue details
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
   sendResponse(res, 200, true, "Student added successfully with fee", {
     student,
     fee,
@@ -118,6 +125,20 @@ export const getStudents = TryCatch(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
+
+  //redis cache
+  const redisKey = `students:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Students fetched (cached)",
+      cachedResponse
+    );
+  }
 
   // single student by ID
   if (id) {
@@ -224,7 +245,7 @@ export const getStudents = TryCatch(async (req, res) => {
     if (!student) {
       return sendResponse(res, 404, false, "Student not found", null);
     }
-
+    await setRedisCache(redisKey, student, 3600); // cache student data
     return sendResponse(
       res,
       200,
@@ -478,7 +499,7 @@ export const getStudents = TryCatch(async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
 
-  return sendResponse(res, 200, true, "Students fetched successfully", {
+  const responseData = {
     students,
     pagination: {
       currentPage: page,
@@ -486,7 +507,17 @@ export const getStudents = TryCatch(async (req, res) => {
       totalCount,
       totalPages,
     },
-  });
+  };
+
+  await setRedisCache(redisKey, responseData, 3600);
+
+  return sendResponse(
+    res,
+    200,
+    true,
+    "Students fetched successfully",
+    responseData
+  );
 });
 
 //update student
@@ -556,6 +587,10 @@ export const updateStudent = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear redis cache for student and revenue details
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+
   sendResponse(res, 200, true, "Student updated successfully", student);
 });
 
@@ -610,6 +645,9 @@ export const deleteStudent = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear redis cache for student and revenue details
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
 
@@ -617,6 +655,18 @@ export const deleteStudent = TryCatch(async (req, res) => {
 export const getStudentsRevenue = TryCatch(async (req, res) => {
   const { year, quarter, locationId } = req.query;
 
+  const redisKey = `studentsRevenue:${year}:${quarter}:${locationId}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Students revenue fetched (cached)",
+      cachedResponse
+    );
+  }
   const quarterMonths = {
     Q1: [1, 2, 3],
     Q2: [4, 5, 6],
@@ -633,8 +683,8 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   // Date Range
   const dateRange = {
-    gte: new Date(numericYear, 0, 1), // Jan 1 of year
-    lt: new Date(numericYear + 1, 0, 1), // Jan 1 of next year
+    gte: new Date(numericYear, 0, 1),
+    lt: new Date(numericYear + 1, 0, 1),
   };
 
   // Location filter via relation
@@ -643,7 +693,7 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       ? {
           student: {
             currentBatch: {
-              locationId: locationId, // relation filter
+              locationId: locationId,
             },
           },
         }
@@ -705,5 +755,122 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     };
   });
 
-  sendResponse(res, 200, true, "Students revenue summary fetched", monthlyData);
+  // --- Step 4: Calculate overall totals (no date filter) ---
+  const allFeesNoDate = await prisma.fee.findMany({
+    where: { ...locationFilter },
+    select: { finalFee: true },
+  });
+
+  const allPaymentsNoDate = await prisma.payment.findMany({
+    where: { ...locationFilter, status: "PAID" },
+    select: { amount: true },
+  });
+
+  const totalStudents = await prisma.student.count({
+    where:
+      locationId && locationId !== "all"
+        ? { currentBatch: { locationId: locationId } }
+        : {},
+  });
+
+  const totalRevenue = allFeesNoDate.reduce(
+    (acc, f) => acc + (f.finalFee || 0),
+    0
+  );
+  const totalCollections = allPaymentsNoDate.reduce(
+    (acc, p) => acc + (p.amount || 0),
+    0
+  );
+
+  const outstandingFees =
+    totalRevenue - totalCollections > 0 ? totalRevenue - totalCollections : 0;
+
+  const collectionRate =
+    totalRevenue > 0
+      ? ((totalCollections / totalRevenue) * 100).toFixed(2)
+      : "0.00";
+
+  // --- Step 5: Calculate Revenue Growth (current month vs previous month using Dates) ---
+  const now = new Date();
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  // Current Month Fees
+  const currentMonthFees = await prisma.fee.findMany({
+    where: {
+      ...locationFilter,
+      createdAt: {
+        gte: currentMonthStart,
+        lt: nextMonthStart,
+      },
+    },
+    select: { finalFee: true },
+  });
+
+  // Previous Month Fees
+  const prevMonthFees = await prisma.fee.findMany({
+    where: {
+      ...locationFilter,
+      createdAt: {
+        gte: prevMonthStart,
+        lt: currentMonthStart,
+      },
+    },
+    select: { finalFee: true },
+  });
+
+  const currentRevenue = currentMonthFees.reduce(
+    (acc, f) => acc + (f.finalFee || 0),
+    0
+  );
+  const prevRevenue = prevMonthFees.reduce(
+    (acc, f) => acc + (f.finalFee || 0),
+    0
+  );
+
+  let revenueGrowth = 0;
+  if (prevRevenue === 0 && currentRevenue === 0) {
+    revenueGrowth = 0; // no change
+  } else if (prevRevenue > 0 && currentRevenue === 0) {
+    revenueGrowth = -100;
+  } else if (prevRevenue === 0 && currentRevenue > 0) {
+    revenueGrowth = 100;
+  } else if (prevRevenue > 0 && currentRevenue > 0) {
+    revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
+  }
+  const newAdmissions = await prisma.student.count({
+    where: {
+      ...(locationId && locationId !== "all"
+        ? { currentBatch: { locationId: locationId } }
+        : {}),
+      createdAt: {
+        gte: currentMonthStart,
+        lt: nextMonthStart,
+      },
+    },
+  });
+  // --- Step 6: Final summary ---
+  const summary = {
+    totalRevenue,
+    totalCollections,
+    totalStudents,
+    outstandingFees,
+    collectionRate: `${collectionRate}%`,
+    revenueGrowth: `${revenueGrowth.toFixed(2)}%`,
+    newAdmissions,
+  };
+  const responseData = {
+    summary,
+    monthlyData,
+  };
+  //set redis cache
+  await setRedisCache(redisKey, responseData, 3600);
+  sendResponse(
+    res,
+    200,
+    true,
+    "Students revenue summary fetched",
+    responseData
+  );
 });
