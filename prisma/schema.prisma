@@ -235,7 +235,7 @@ model DirectorLedger {
   student         Student? @relation(fields: [studentId], references: [id])
   studentId       String?
 
-  location   Location @relation(fields: [locationId], references: [id])
+  location   Location? @relation(fields: [locationId], references: [id])
   locationId String
 
   createdAt DateTime @default(now())
