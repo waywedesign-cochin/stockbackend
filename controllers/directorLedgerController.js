@@ -28,7 +28,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         transactionType,
         debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
         description,
-        locationId,
+        locationId: userLocationId,
         referenceId,
         studentId,
         directorId,
