@@ -10,7 +10,6 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     amount,
     transactionType,
     description,
-    locationId,
     referenceId,
     studentId,
     directorId,
