@@ -2,6 +2,7 @@ import express from "express";
 import {
   addCourse,
   deleteCourse,
+  getCourseReport,
   getCourses,
   updateCourse,
 } from "../controllers/courseController.js";
@@ -19,5 +20,8 @@ router.put("/update-course/:id", jwtMiddleware, updateCourse);
 
 //delete course
 router.delete("/delete-course/:id", jwtMiddleware, deleteCourse);
+
+//get revenue details
+ router.get("/revenue-details", getCourseReport);
 
 export default router;

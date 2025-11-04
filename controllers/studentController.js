@@ -613,7 +613,7 @@ export const deleteStudent = TryCatch(async (req, res) => {
   sendResponse(res, 200, true, "Student deleted successfully", null);
 });
 
-//get students revenue
+// Get Students Revenue (with relation filter)
 export const getStudentsRevenue = TryCatch(async (req, res) => {
   const { year, quarter, locationId } = req.query;
 
@@ -629,35 +629,45 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       ? quarterMonths[quarter]
       : Array.from({ length: 12 }, (_, i) => i + 1);
 
-  const locationFilter =
-    locationId && locationId !== "all" ? { locationId } : {};
-
   const numericYear = parseInt(year, 10);
 
-  // --- Step 1: Get all fees in one go ---
+  // Date Range
+  const dateRange = {
+    gte: new Date(numericYear, 0, 1), // Jan 1 of year
+    lt: new Date(numericYear + 1, 0, 1), // Jan 1 of next year
+  };
+
+  // Location filter via relation
+  const locationFilter =
+    locationId && locationId !== "all"
+      ? {
+          student: {
+            currentBatch: {
+              locationId: locationId, // relation filter
+            },
+          },
+        }
+      : {};
+
+  // --- Step 1: Fetch all fees in one go ---
   const allFees = await prisma.fee.findMany({
     where: {
-      student: { ...locationFilter },
-      createdAt: {
-        gte: new Date(numericYear, 0, 1), // ✅ Jan 1st of selected year
-        lt: new Date(numericYear + 1, 0, 1), // ✅ Jan 1st of next year
-      },
+      ...locationFilter,
+      createdAt: dateRange,
     },
     select: { finalFee: true, createdAt: true },
   });
 
-  // --- Step 2: Get all payments in one go ---
+  // --- Step 2: Fetch all payments in one go ---
   const allPayments = await prisma.payment.findMany({
     where: {
-      student: { ...locationFilter },
-      createdAt: {
-        gte: new Date(numericYear, 0, 1),
-        lt: new Date(numericYear + 1, 0, 1),
-      },
+      ...locationFilter,
+      createdAt: dateRange,
     },
     select: { amount: true, status: true, createdAt: true },
   });
 
+  // --- Step 3: Prepare monthly summary ---
   const monthNames = [
     "Jan",
     "Feb",
@@ -685,15 +695,13 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     const collections = payments
       .filter((p) => p.status === "PAID")
       .reduce((acc, p) => acc + (p.amount || 0), 0);
-    const outstanding = payments
-      .filter((p) => p.status === "PENDING")
-      .reduce((acc, p) => acc + (p.amount || 0), 0);
+    const outstanding = revenue - collections;
 
     return {
       month: monthNames[month - 1],
       revenue,
       collections,
-      outstanding,
+      outstanding: outstanding > 0 ? outstanding : 0,
     };
   });
 
