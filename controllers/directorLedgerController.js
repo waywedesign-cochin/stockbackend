@@ -320,7 +320,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       "Director ledger entry updated",
       `Director ledger entry updated by ${userName}, student changed.`,
       studentId || null,
-      userLocationId
+      userLocationId,
+      existing.directorId || null
     );
     return sendResponse(
       res,
