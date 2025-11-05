@@ -2,6 +2,11 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 
 //add location
 export const addLocation = TryCatch(async (req, res) => {
@@ -32,12 +37,27 @@ export const addLocation = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    await clearRedisCache("locations*");
+    await clearRedisCache("locationsReport:*");
   }
   sendResponse(res, 200, true, "Location added successfully", location);
 });
 
 //get location
 export const getLocations = TryCatch(async (req, res) => {
+  //redis cache
+  const redisKey = `locations`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Locations fetched successfully",
+      cachedResponse
+    );
+  }
   const locations = await prisma.location.findMany({
     include: {
       batches: true,
@@ -47,6 +67,8 @@ export const getLocations = TryCatch(async (req, res) => {
       createdAt: "desc",
     },
   });
+  //set redis cache
+  await setRedisCache(redisKey, locations);
   sendResponse(res, 200, true, "Locations fetched successfully", locations);
 });
 
@@ -77,6 +99,9 @@ export const updateLocation = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    //clear redis cache
+    await clearRedisCache("locations*");
+    await clearRedisCache("locationsReport:*");
   }
   sendResponse(res, 200, true, "Location updated successfully", location);
 });
@@ -103,6 +128,9 @@ export const deleteLocation = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    //clear redis cache
+    await clearRedisCache("locations*");
+    await clearRedisCache("locationsReport:*");
   }
   sendResponse(res, 200, true, "Location deleted successfully", null);
 });
@@ -110,7 +138,19 @@ export const deleteLocation = TryCatch(async (req, res) => {
 //  Get Location-wise Performance
 export const getLocationWiseReport = TryCatch(async (req, res) => {
   const { year, quarter, locationId } = req.query;
-
+  //redis cache
+  const redisKey = `locationsReport:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Location-wise report fetched successfully",
+      cachedResponse
+    );
+  }
   // 1️ Define quarters
   const quarterMonths = {
     Q1: [1, 2, 3],
@@ -198,6 +238,7 @@ export const getLocationWiseReport = TryCatch(async (req, res) => {
       batches: batchIds.length,
     });
   }
-
+  //set redis cache
+  await setRedisCache(redisKey, report);
   sendResponse(res, 200, true, "Location-wise report fetched", report);
 });

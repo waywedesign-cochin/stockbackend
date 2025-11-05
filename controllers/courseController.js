@@ -38,9 +38,8 @@ export const addCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
-    //redis cache
-    await clearRedisCache("courses:*");
-    await clearRedisCache("coursesReport:*");
+    //clear redis cache
+    await clearRedisCache("courses*");
   }
   sendResponse(res, 200, true, "Course added successfully", course);
 });
@@ -48,18 +47,18 @@ export const addCourse = TryCatch(async (req, res) => {
 //get courses
 export const getCourses = TryCatch(async (req, res) => {
   //redis cache
-  const cachedCourses = await getRedisCache("courses:*");
-  if (cachedCourses) {
+  const redisKey = `courses`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
     console.log("📦 Serving from Redis Cache");
     return sendResponse(
       res,
       200,
       true,
       "Courses fetched successfully",
-      JSON.parse(cachedCourses)
+      cachedResponse
     );
   }
-
   const courses = await prisma.course.findMany({
     include: {
       batches: true,
@@ -69,7 +68,7 @@ export const getCourses = TryCatch(async (req, res) => {
     },
   });
   //set redis cache
-  await setRedisCache("courses:*", JSON.stringify(courses));
+  await setRedisCache(redisKey, courses);
   sendResponse(res, 200, true, "Courses fetched successfully", courses);
 });
 
@@ -104,8 +103,8 @@ export const updateCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
-    //redis cache
-    await clearRedisCache("courses:*");
+    //clear redis cache
+    await clearRedisCache("courses*");
   }
   sendResponse(res, 200, true, "Course updated successfully", course);
 });
@@ -132,9 +131,8 @@ export const deleteCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
-    //redis cache
-    await clearRedisCache("courses:*");
-    await clearRedisCache("coursesReport:*");
+    //clear redis cache
+    await clearRedisCache("courses*");
   }
   sendResponse(res, 200, true, "Course deleted successfully", null);
 });
@@ -142,19 +140,6 @@ export const deleteCourse = TryCatch(async (req, res) => {
 //get course report
 export const getCourseReport = TryCatch(async (req, res) => {
   const { locationId } = req.query;
-  //redis cache
-  const redisKey = `courseReport:${JSON.stringify(req.query)}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Course Report fetched successfully",
-      JSON.parse(cachedResponse)
-    );
-  }
 
   // 🎯 Get all fees and related course info (filtered by location if provided)
   const fees = await prisma.fee.findMany({
@@ -215,8 +200,6 @@ export const getCourseReport = TryCatch(async (req, res) => {
       revenue,
     })
   );
-  //set redis cache
-  await setRedisCache(redisKey, JSON.stringify(courseRevenueReport));
 
   sendResponse(res, 200, true, "Course report fetched successfully", {
     courseRevenueReport,
