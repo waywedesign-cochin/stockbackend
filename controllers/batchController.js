@@ -2,6 +2,11 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 
 //add batch
 export const addBatch = TryCatch(async (req, res) => {
@@ -57,14 +62,30 @@ export const addBatch = TryCatch(async (req, res) => {
       userLocationId,
       batch.id
     );
-  }
 
+    //clear redis cache for batches
+    await clearRedisCache("batches:*");
+  }
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
 
 //get batches
 export const getBatches = TryCatch(async (req, res) => {
   const { id, location, course, status, mode, search } = req.query;
+
+  //redis cache
+  const redisKey = `batches:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Batches fetched successfully",
+      cachedResponse
+    );
+  }
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -155,7 +176,8 @@ export const getBatches = TryCatch(async (req, res) => {
       createdAt: "desc",
     },
   });
-  sendResponse(res, 200, true, "Batches fetched successfully", {
+
+  const responseData = {
     batches,
     pagination: {
       currentPage: page,
@@ -163,7 +185,10 @@ export const getBatches = TryCatch(async (req, res) => {
       totalPages,
       totalCount,
     },
-  });
+  };
+  await setRedisCache(redisKey, responseData);
+
+  sendResponse(res, 200, true, "Batches fetched successfully", responseData);
 });
 
 //update batch
@@ -219,6 +244,8 @@ export const updateBatch = TryCatch(async (req, res) => {
       userLocationId,
       batch.id
     );
+    //redis cache clear
+    await clearRedisCache("batches:*");
   }
   sendResponse(res, 200, true, "Batch updated successfully", batch);
 });
@@ -231,11 +258,14 @@ export const deleteBatch = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
-  await prisma.$transaction(async (tx) => {
-    const batch = await prisma.batch.delete({
+  const batch = await prisma.$transaction(async (tx) => {
+    const result = await prisma.batch.delete({
       where: { id },
     });
 
+    return result;
+  });
+  if (batch) {
     await addCommunicationLogEntry(
       loggedById,
       "BATCH_DELETED",
@@ -246,14 +276,29 @@ export const deleteBatch = TryCatch(async (req, res) => {
       userLocationId,
       batch.id
     );
-    return batch;
-  });
+    //redis cache clear
+    await clearRedisCache("batches:*");
+  }
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });
 
 //get batch report
 export const getBatchesReport = TryCatch(async (req, res) => {
   const { locationId, year, quarter } = req.query;
+
+  //redis cache
+  const redisKey = `batchesReport:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Batches report fetched (cached)",
+      cachedResponse
+    );
+  }
 
   // 🧮 Define quarter months
   const quarterMonths = {
@@ -315,6 +360,9 @@ export const getBatchesReport = TryCatch(async (req, res) => {
       completionRate,
     };
   });
+
+  //redis cache
+  await setRedisCache(redisKey, batchPerformance);
 
   sendResponse(res, 200, true, "Batch report fetched successfully", {
     batchPerformance,
