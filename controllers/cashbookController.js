@@ -105,8 +105,9 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     new Date(),
     "Cashbook Entry Added",
     `A new cashbook entry has been added by ${userName}.`,
-    studentId || directorId || null,
-    userLocationId
+    studentId || null,
+    userLocationId,
+    directorId || null
   );
 
   // Success response
@@ -395,7 +396,8 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       "Cashbook entry updated",
       `Cashbook entry updated by ${userName}, student changed.`,
       studentId || null,
-      userLocationId
+      userLocationId,
+      existing.directorId || null
     );
 
     return sendResponse(
@@ -429,7 +431,8 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     "Cashbook entry updated",
     `Cashbook entry updated by ${userName}.`,
     studentId || null,
-    userLocationId
+    userLocationId,
+    existing.directorId || null
   );
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
@@ -485,8 +488,9 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       new Date(),
       "Cashbook entry deleted",
       `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
-      entry.studentId || entry.directorId || null,
-      userLocationId
+      entry.studentId || null,
+      userLocationId,
+      entry.directorId || null
     );
   }
   await prisma.cashbook.delete({ where: { id } });
@@ -497,8 +501,9 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     new Date(),
     "Cashbook entry deleted",
     `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
-    entry.studentId || entry.directorId || null,
-    userLocationId
+    entry.studentId || null,
+    userLocationId,
+    entry.directorId || null
   );
   sendResponse(res, 200, true, "Entry deleted successfully", null);
 });
