@@ -84,7 +84,6 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
 
     return newEntry;
   });
-
   // final response
   if (!result) return;
   // Add communication log entry
@@ -94,8 +93,9 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     new Date(),
     "Director Ledger Entry Added",
     `A new director ledger entry has been added by ${userName}.`,
-    studentId || directorId || null,
-    userLocationId
+    studentId || null,
+    userLocationId,
+    directorId || null
   );
   return sendResponse(res, 200, true, "Entry added successfully", result);
 });
@@ -353,7 +353,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     "Director ledger entry updated",
     `Director ledger entry updated by ${userName}.`,
     studentId || null,
-    userLocationId
+    userLocationId,
+    directorId || null
   );
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
@@ -416,7 +417,8 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       "Director ledger entry deleted",
       `Director ledger entry deleted by ${userName}, student changed.`,
       entry.studentId || null,
-      userLocationId
+      userLocationId,
+      entry.directorId || null
     );
     return sendResponse(
       res,
