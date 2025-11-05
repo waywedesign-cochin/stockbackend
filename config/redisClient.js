@@ -1,17 +1,23 @@
 // utils/redisClient.js
-import { createClient } from "redis";
+import Redis from "ioredis";
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL,
+const redis = new Redis(process.env.UPSTASH_REDIS_URL, {
+  tls: {}, // required for Upstash secure connection
 });
 
-redisClient.on("error", (err) => console.error("Redis Client Error:", err));
+// ✅ Log when connected
+redis.on("connect", () => {
+  console.log("✅ Redis connected");
+});
 
-(async () => {
-  if (!redisClient.isOpen) {
-    await redisClient.connect();
-    console.log("✅ Redis connected");
-  }
-})();
+// ❌ Log errors
+redis.on("error", (err) => {
+  console.error("❌ Redis connection error:", err);
+});
 
-export default redisClient;
+// 🔄 Log reconnect attempts
+redis.on("reconnecting", () => {
+  console.log("🔄 Redis reconnecting...");
+});
+
+export default redis;

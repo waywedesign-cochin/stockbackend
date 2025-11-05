@@ -11,7 +11,9 @@ export const addCommunicationLogEntry = async (
   message,
   studentId,
   locationId,
+  directorId,
   batchId
+
 ) => {
   try {
     const newEntry = await prisma.communicationLog.create({
@@ -23,6 +25,7 @@ export const addCommunicationLogEntry = async (
         message,
         studentId,
         locationId,
+        directorId,
         batchId,
       },
     });
@@ -36,13 +39,14 @@ export const addCommunicationLogEntry = async (
 
 //get communication logs by studentId,userId,locationId
 export const getCommunicationLogs = TryCatch(async (req, res) => {
-  const { studentId, loggedById, locationId, year, month, search } = req.query;
+  const { directorId, studentId, loggedById, locationId, year, month, search } = req.query;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
   const logFilter = { locationId };
   if (studentId) logFilter.studentId = studentId;
+  if (directorId) logFilter.directorId = directorId;
   if (loggedById) logFilter.loggedById = loggedById;
   if (search) {
     logFilter.OR = [
@@ -75,6 +79,7 @@ export const getCommunicationLogs = TryCatch(async (req, res) => {
           },
         },
       },
+      director: { select: { id: true, name: true, email: true } },
       location: { select: { id: true, name: true } },
       loggedBy: {
         select: { id: true, username: true, email: true, role: true },
