@@ -2,6 +2,11 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 
 //add entry
 export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
@@ -97,6 +102,8 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     userLocationId,
     directorId || null
   );
+  //clear redis cache
+  await clearRedisCache("directorLedger:*");
   return sendResponse(res, 200, true, "Entry added successfully", result);
 });
 
@@ -104,7 +111,19 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
 export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   const { directorId, month, year, search, transactionType, page, limit } =
     req.query;
-
+  //redis cache
+  const redisKey = `directorLedger:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache(Director Ledger)");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Director ledger entries fetched successfully",
+      JSON.parse(cachedResponse)
+    );
+  }
   const pageNumber = parseInt(page) || 1;
   const pageSize = parseInt(limit) || 10;
   const skip = (pageNumber - 1) * pageSize;
@@ -175,39 +194,46 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
 
   const totalCount = await prisma.directorLedger.count({ where: dataFilter });
 
-  // ---------- Response ----------
-  return res.json({
-    success: true,
-    data: {
-      totals: {
-        studentsPaid:
-          totals.find((t) => t.transactionType === "STUDENT_PAID")?._sum
-            .amount || 0,
-        otherExpenses:
-          totals.find((t) => t.transactionType === "OTHER_EXPENSE")?._sum
-            .amount || 0,
-        cashInHand:
-          totals.find((t) => t.transactionType === "OWNER_TAKEN")?._sum
-            .amount || 0,
-        institutionGaveBank:
-          totals.find((t) => t.transactionType === "INSTITUTION_GAVE_BANK")
-            ?._sum.amount || 0,
-        // personal:
-        //   totals.find((t) => t.transactionType === "PERSONAL")?._sum.amount ||
-        //   0,
-        totalDebit,
-        totalCredit,
-        periodBalance,
-      },
-      entries,
-      pagination: {
-        page: pageNumber,
-        limit: pageSize,
-        totalPages: Math.ceil(totalCount / pageSize),
-        totalEntries: totalCount,
-      },
+  const responseData = {
+    totals: {
+      studentsPaid:
+        totals.find((t) => t.transactionType === "STUDENT_PAID")?._sum.amount ||
+        0,
+      otherExpenses:
+        totals.find((t) => t.transactionType === "OTHER_EXPENSE")?._sum
+          .amount || 0,
+      cashInHand:
+        totals.find((t) => t.transactionType === "OWNER_TAKEN")?._sum.amount ||
+        0,
+      institutionGaveBank:
+        totals.find((t) => t.transactionType === "INSTITUTION_GAVE_BANK")?._sum
+          .amount || 0,
+      // personal:
+      //   totals.find((t) => t.transactionType === "PERSONAL")?._sum.amount ||
+      //   0,
+      totalDebit,
+      totalCredit,
+      periodBalance,
     },
-  });
+    entries,
+    pagination: {
+      page: pageNumber,
+      limit: pageSize,
+      totalPages: Math.ceil(totalCount / pageSize),
+      totalEntries: totalCount,
+    },
+  };
+
+  //set redis cache
+  await setRedisCache(redisKey, JSON.stringify(responseData));
+  // ---------- Response ----------
+  sendResponse(
+    res,
+    200,
+    true,
+    "Director ledger entries fetched successfully",
+    responseData
+  );
 });
 
 //update entry
@@ -317,6 +343,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           description,
           referenceId,
           studentId,
+          directorId: existing.directorId,
         },
       });
 
@@ -334,6 +361,9 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       userLocationId,
       existing.directorId || null
     );
+    //clear redis cache
+    await clearRedisCache("directorLedger:*");
+
     return sendResponse(
       res,
       200,
@@ -352,6 +382,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       transactionType,
       debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
       description,
+      directorId: existing.directorId,
       referenceId,
     },
   });
@@ -368,6 +399,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     userLocationId,
     existing.directorId || null
   );
+  //clear redis cache
+  await clearRedisCache("directorLedger:*");
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
@@ -432,6 +465,8 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       userLocationId,
       entry.directorId || null
     );
+    //clear redis cache
+    await clearRedisCache("directorLedger:*");
     return sendResponse(
       res,
       200,
@@ -453,6 +488,10 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
     null,
     userLocationId
   );
+
+  //clear redis cache
+  await clearRedisCache("directorLedger:*");
+
   sendResponse(
     res,
     200,

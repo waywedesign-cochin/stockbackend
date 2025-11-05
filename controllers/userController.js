@@ -5,6 +5,11 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import { sendPasswordResetEmail } from "../utils/sendPasswordResetEmail.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 //signup
 export const signUp = TryCatch(async (req, res) => {
   const { username, email, password } = req.body;
@@ -22,6 +27,9 @@ export const signUp = TryCatch(async (req, res) => {
       password: hashedPassword,
     },
   });
+  //clear redis cache
+  await clearRedisCache("users:*");
+
   sendResponse(
     res,
     201,
@@ -87,6 +95,19 @@ export const getCurrentUser = TryCatch(async (req, res) => {
 
 export const getAllUsers = TryCatch(async (req, res) => {
   const { role, search } = req.query;
+  //redis cache
+  const redisKey = `users:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Users fetched successfully",
+      cachedResponse
+    );
+  }
   let whereClause = {};
 
   if (role && role !== "0") {
@@ -105,6 +126,8 @@ export const getAllUsers = TryCatch(async (req, res) => {
       location: true,
     },
   });
+  //set redis cache
+  await setRedisCache(redisKey, users);
   sendResponse(res, 200, true, "Users fetched successfully", users);
 });
 
@@ -132,6 +155,8 @@ export const updateUser = TryCatch(async (req, res) => {
       locationId,
     },
   });
+  //redis cache
+  await clearRedisCache("users:*");
   sendResponse(res, 200, true, "User updated successfully", user);
 });
 
@@ -141,6 +166,8 @@ export const deleteUser = TryCatch(async (req, res) => {
   const user = await prisma.user.delete({
     where: { id },
   });
+  await clearRedisCache("users:*");
+
   sendResponse(res, 200, true, "User deleted successfully", user);
 });
 
