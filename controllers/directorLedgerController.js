@@ -157,6 +157,17 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
 
   const entries = await prisma.directorLedger.findMany({
     where: dataFilter,
+    include: {
+      student: {
+        select: {
+          id: true,
+          name: true,
+          currentBatchId: true,
+          currentBatch: { select: { name: true } },
+        },
+      },
+      director: { select: { id: true, name: true, email: true } },
+    },
     skip,
     take: pageSize,
     orderBy: { transactionDate: "desc" },
@@ -355,7 +366,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     `Director ledger entry updated by ${userName}.`,
     studentId || null,
     userLocationId,
-    directorId || null
+    existing.directorId || null
   );
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });

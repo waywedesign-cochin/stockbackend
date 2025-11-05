@@ -2,6 +2,11 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import {
+  clearRedisCache,
+  getRedisCache,
+  setRedisCache,
+} from "../utils/redisCache.js";
 //add course
 export const addCourse = TryCatch(async (req, res) => {
   const { name, description, baseFee, duration, mode } = req.body;
@@ -33,12 +38,27 @@ export const addCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    //redis cache
+    await clearRedisCache("courses:*");
   }
   sendResponse(res, 200, true, "Course added successfully", course);
 });
 
 //get courses
 export const getCourses = TryCatch(async (req, res) => {
+  //redis cache
+  const cachedCourses = await getRedisCache("courses:*");
+  if (cachedCourses) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Courses fetched successfully",
+      JSON.parse(cachedCourses)
+    );
+  }
+
   const courses = await prisma.course.findMany({
     include: {
       batches: true,
@@ -47,6 +67,8 @@ export const getCourses = TryCatch(async (req, res) => {
       createdAt: "desc",
     },
   });
+  //set redis cache
+  await setRedisCache("courses:*", JSON.stringify(courses));
   sendResponse(res, 200, true, "Courses fetched successfully", courses);
 });
 
@@ -81,6 +103,8 @@ export const updateCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    //redis cache
+    await clearRedisCache("courses:*");
   }
   sendResponse(res, 200, true, "Course updated successfully", course);
 });
@@ -107,6 +131,8 @@ export const deleteCourse = TryCatch(async (req, res) => {
       null,
       userLocationId
     );
+    //redis cache
+    await clearRedisCache("courses:*");
   }
   sendResponse(res, 200, true, "Course deleted successfully", null);
 });
