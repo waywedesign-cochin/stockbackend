@@ -110,6 +110,7 @@ export const getStudents = TryCatch(async (req, res) => {
     id,
     search,
     isFundedAccount,
+    currentBatchId,
     location,
     batch,
     mode,
@@ -275,6 +276,7 @@ export const getStudents = TryCatch(async (req, res) => {
   if (
     batch ||
     location ||
+    currentBatchId ||
     mode ||
     status ||
     course ||
@@ -293,6 +295,9 @@ export const getStudents = TryCatch(async (req, res) => {
           { batchHistory: { some: { toBatchId: batch } } },
         ],
       },
+
+      //current batch filter
+      currentBatchId && { currentBatchId: currentBatchId },
 
       // Location filter
       location && {
