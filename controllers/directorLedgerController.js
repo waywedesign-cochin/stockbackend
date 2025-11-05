@@ -166,7 +166,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
           currentBatch: { select: { name: true } },
         },
       },
-      director: { select: { id: true, name: true, email: true } },
+      director: { select: { id: true, username: true, email: true } },
     },
     skip,
     take: pageSize,

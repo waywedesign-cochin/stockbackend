@@ -65,6 +65,7 @@ export const addBatch = TryCatch(async (req, res) => {
 
     //clear redis cache for batches
     await clearRedisCache("batches:*");
+    await clearRedisCache("batchesReport:*");
   }
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
@@ -278,6 +279,7 @@ export const deleteBatch = TryCatch(async (req, res) => {
     );
     //redis cache clear
     await clearRedisCache("batches:*");
+    await clearRedisCache("batchesReport:*");
   }
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });

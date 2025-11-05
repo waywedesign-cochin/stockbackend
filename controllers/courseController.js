@@ -40,6 +40,7 @@ export const addCourse = TryCatch(async (req, res) => {
     );
     //redis cache
     await clearRedisCache("courses:*");
+    await clearRedisCache("coursesReport:*");
   }
   sendResponse(res, 200, true, "Course added successfully", course);
 });
@@ -133,6 +134,7 @@ export const deleteCourse = TryCatch(async (req, res) => {
     );
     //redis cache
     await clearRedisCache("courses:*");
+    await clearRedisCache("coursesReport:*");
   }
   sendResponse(res, 200, true, "Course deleted successfully", null);
 });
@@ -140,6 +142,19 @@ export const deleteCourse = TryCatch(async (req, res) => {
 //get course report
 export const getCourseReport = TryCatch(async (req, res) => {
   const { locationId } = req.query;
+  //redis cache
+  const redisKey = `courseReport:${JSON.stringify(req.query)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Course Report fetched successfully",
+      JSON.parse(cachedResponse)
+    );
+  }
 
   // 🎯 Get all fees and related course info (filtered by location if provided)
   const fees = await prisma.fee.findMany({
@@ -200,6 +215,8 @@ export const getCourseReport = TryCatch(async (req, res) => {
       revenue,
     })
   );
+  //set redis cache
+  await setRedisCache(redisKey, JSON.stringify(courseRevenueReport));
 
   sendResponse(res, 200, true, "Course report fetched successfully", {
     courseRevenueReport,
