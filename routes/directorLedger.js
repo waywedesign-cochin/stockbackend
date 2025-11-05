@@ -3,6 +3,7 @@ import {
   addDirectorLedgerEntry,
   deleteDirectorLedgerEntry,
   getDirectorLedgerEntries,
+  updateDirectorLedgerEntry,
 } from "../controllers/directorLedgerController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 
@@ -13,6 +14,9 @@ router.post("/add-entry", jwtMiddleware, addDirectorLedgerEntry);
 
 //get ledger entries
 router.get("/entries", getDirectorLedgerEntries);
+
+//update
+router.put("/update-entry/:id", jwtMiddleware, updateDirectorLedgerEntry);
 
 //delete
 router.delete("/delete-entry/:id", jwtMiddleware, deleteDirectorLedgerEntry);
