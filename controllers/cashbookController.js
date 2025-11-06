@@ -8,7 +8,7 @@ import {
   setRedisCache,
 } from "../utils/redisCache.js";
 
-//add cashbbook entry
+//ADD CASHBOOK ENTRY---------------------------------------------
 export const addCashbookEntry = TryCatch(async (req, res) => {
   const {
     transactionDate,
@@ -82,25 +82,23 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
         },
       });
     }
-
-    // if director id is present create director ledger entry
-    if (directorId) {
+    if (transactionType === "OWNER_TAKEN" && directorId) {
       await tx.directorLedger.create({
         data: {
-          directorId,
           transactionDate,
           amount,
-          transactionType,
-          debitCredit: transactionType === "OWNER_TAKEN" ? "CREDIT" : "DEBIT",
-          description,
+          transactionType: "OWNER_TAKEN",
+          debitCredit: "CREDIT",
+          description: description || "Owner cash withdrawal",
           referenceId,
+          directorId,
           locationId,
+          cashbookId: newEntry.id,
         },
       });
-      //clear redis cache
-      await clearRedisCache("directorLedger:*");
     }
-
+    //clear redis cache
+    await clearRedisCache("directorLedger:*");
     return newEntry;
   });
 
@@ -128,7 +126,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
   );
 });
 
-//get cashbook entries with filters and pagination
+//GET CASHBOOK ENTRIES----------------------------------------------------------------------
 export const getCashbookEntries = TryCatch(async (req, res) => {
   const { locationId, month, year, search, transactionType, page, limit } =
     req.query;
@@ -304,7 +302,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
   );
 });
 
-//-------------------------update cashbook entry-------------------------------
+//UPDATE CASHBOOK ENTRY---------------------------------------------
 
 export const updateCashbookEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
@@ -315,6 +313,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     description,
     referenceId,
     studentId,
+    directorId,
   } = req.body;
   const {
     userId: loggedById,
@@ -330,7 +329,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     return sendResponse(res, 404, false, "Cashbook entry not found");
 
   // if studentId changed
-  if (studentId && existing.studentId !== studentId) {
+  if (
+    transactionType === "STUDENT_PAID" &&
+    studentId &&
+    existing.studentId !== studentId
+  ) {
     const newEntry = await prisma.$transaction(async (tx) => {
       // 1️⃣ Reverse fee update for old student
       if (existing.student) {
@@ -440,6 +443,67 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     );
   }
 
+  //directorId changed
+  if (
+    transactionType === "OWNER_TAKEN" &&
+    directorId &&
+    existing.directorId !== directorId
+  ) {
+    const updated = await prisma.$transaction(async (tx) => {
+      // Update cashbook entry first
+      const updatedCashbook = await tx.cashbook.update({
+        where: { id },
+        data: {
+          transactionDate,
+          amount,
+          transactionType,
+          debitCredit: "DEBIT",
+          description,
+          referenceId,
+          directorId, // store director on cashbook too
+        },
+      });
+
+      //delete old ledger entry
+      await tx.directorLedger.deleteMany({ where: { cashbookId: id } });
+
+      //create new ledger entry
+      await tx.directorLedger.create({
+        data: {
+          transactionDate,
+          amount,
+          transactionType: "OWNER_TAKEN",
+          debitCredit: "CREDIT",
+          description: description || "Owner cash withdrawal (updated)",
+          referenceId,
+          directorId,
+          locationId: userLocationId,
+          cashbookId: updatedCashbook.id,
+        },
+      });
+
+      return updatedCashbook;
+    });
+
+    if (!updated)
+      return sendResponse(res, 400, false, "Cashbook entry update failed");
+    //create communication log
+    await addCommunicationLogEntry(
+      loggedById,
+      "CASHBOOK_ENTRY_UPDATED",
+      new Date(),
+      "Cashbook entry updated",
+      `Cashbook entry updated by ${userName}, director changed.`,
+      studentId || null,
+      userLocationId,
+      directorId || null
+    );
+    //clear redis cache
+    await clearRedisCache("cashbook:*");
+    await clearRedisCache("directorLedger:*");
+    sendResponse(res, 200, true, "Entry updated successfully", updated);
+  }
+
   // If studentId is same, simple update
   const updatedEntry = await prisma.cashbook.update({
     where: { id },
@@ -452,8 +516,21 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       referenceId,
     },
   });
+  if (transactionType === "OWNER_TAKEN") {
+    await prisma.directorLedger.updateMany({
+      where: { cashbookId: id },
+      data: {
+        transactionDate,
+        amount,
+        description,
+        referenceId,
+      },
+    });
+  }
+
   if (!updatedEntry)
     return sendResponse(res, 400, false, "Cashbook entry update failed");
+
   //create communication log
   await addCommunicationLogEntry(
     loggedById,
@@ -465,6 +542,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     userLocationId,
     existing.directorId || null
   );
+
   //clear redis cache
   await clearRedisCache("cashbook:*");
   if (updatedEntry.transactionType === "OWNER_TAKEN")
@@ -472,7 +550,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
-//delete cashbook entry
+//DELETE CASHBOOK ENTRY----------------------------------------------------------------
 export const deleteCashbookEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
   const {
@@ -489,7 +567,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     return sendResponse(res, 404, false, "Cashbook entry not found", null);
 
   // if linked to student, reverse fee and payment
-  if (entry.studentId) {
+  if (entry.studentId && entry.transactionType === "STUDENT_PAID") {
     await prisma.$transaction(async (tx) => {
       // 1️⃣ Reverse fee update for old student
       if (entry.student) {
@@ -516,7 +594,9 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       // 2️⃣ Delete old cashbook entry
       await tx.cashbook.delete({ where: { id } });
     });
+    //clear redis cache
     await clearRedisCache("cashbook:*");
+
     //create communication log
     await addCommunicationLogEntry(
       loggedById,
@@ -528,6 +608,9 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       userLocationId,
       null
     );
+  }
+  if (entry.transactionType === "OWNER_TAKEN" && entry.directorId) {
+    await prisma.directorLedger.deleteMany({ where: { cashbookId: id } });
   }
   await prisma.cashbook.delete({ where: { id } });
   //clear redis cache
