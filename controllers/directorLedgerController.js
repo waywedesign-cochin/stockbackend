@@ -8,7 +8,7 @@ import {
   setRedisCache,
 } from "../utils/redisCache.js";
 
-//add entry
+//ADD DIRECTOR LEDGER ENTRY---------------------------------------------
 export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
   const {
     transactionDate,
@@ -107,7 +107,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
   return sendResponse(res, 200, true, "Entry added successfully", result);
 });
 
-//------------------------------get entries with filters------------------------------------
+//GET DIRECTOR LEDGER ENTRIES---------------------------------------------
 export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   const { directorId, month, year, search, transactionType, page, limit } =
     req.query;
@@ -236,7 +236,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   );
 });
 
-//update entry
+//UPDATE DIRECTOR LEDGER ENTRY---------------------------------------------
 export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
   const {
@@ -411,7 +411,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
-//delete entry
+//DELETE DIRECTOR LEDGER ENTRY----------------------------------------------------------------
 export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
   const {

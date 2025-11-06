@@ -203,28 +203,29 @@ model batchHistory {
 }
 
 model cashbook {
-  id              String   @id @default(uuid())
+  id              String           @id @default(uuid())
   transactionDate DateTime
-  transactionType String   @default("STUDENT_PAID") // 'STUDENT_PAID' | 'OFFICE_EXPENSE' | 'OWNER_TAKEN';
+  transactionType String           @default("STUDENT_PAID") // 'STUDENT_PAID' | 'OFFICE_EXPENSE' | 'OWNER_TAKEN';
   amount          Int
-  debitCredit     String   @default("CREDIT") // 'DEBIT' | 'CREDIT'
+  debitCredit     String           @default("CREDIT") // 'DEBIT' | 'CREDIT'
   description     String?
   referenceId     String? // e.g., Payment ID or Expense ID
-  location        Location @relation(fields: [locationId], references: [id])
+  location        Location         @relation(fields: [locationId], references: [id])
   locationId      String
-  student         Student? @relation(fields: [studentId], references: [id])
+  student         Student?         @relation(fields: [studentId], references: [id])
   studentId       String?
-  director        User?    @relation(fields: [directorId], references: [id])
+  director        User?            @relation(fields: [directorId], references: [id])
   directorId      String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  directorLedgers DirectorLedger[]
 
   @@map("cashbooks")
 }
 
 model DirectorLedger {
   id              String   @id @default(uuid())
-  director        User?     @relation(fields: [directorId], references: [id])
+  director        User?    @relation(fields: [directorId], references: [id])
   directorId      String
   transactionDate DateTime
   transactionType String // 'STUDENT_PAID' | 'OTHER_EXPENSE' | 'FROM_OFFICE' | 'OWNER_TAKEN' 
@@ -232,11 +233,15 @@ model DirectorLedger {
   debitCredit     String // 'DEBIT' or 'CREDIT'
   description     String?
   referenceId     String? // e.g., Payment ID or Expense ID
+
   student         Student? @relation(fields: [studentId], references: [id])
   studentId       String?
 
   location   Location? @relation(fields: [locationId], references: [id])
   locationId String
+
+  cashbookId String? // e.g., Cashbook ID created when owner taken entry added in cashbook
+  cashbook   cashbook? @relation(fields: [cashbookId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
