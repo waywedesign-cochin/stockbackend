@@ -134,7 +134,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     req.query;
 
   //redis cache
-  const redisKey = `cashbookEntries:${JSON.stringify(req.query)}`;
+  const redisKey = `cashbook:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
     console.log("📦 Serving from Redis Cache (Cashbook)");
@@ -407,6 +407,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           description,
           referenceId,
           studentId,
+          locationId: userLocationId,
         },
       });
 
@@ -515,6 +516,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       // 2️⃣ Delete old cashbook entry
       await tx.cashbook.delete({ where: { id } });
     });
+    await clearRedisCache("cashbook:*");
     //create communication log
     await addCommunicationLogEntry(
       loggedById,
@@ -528,6 +530,10 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     );
   }
   await prisma.cashbook.delete({ where: { id } });
+  //clear redis cache
+  await clearRedisCache("cashbook:*");
+  if (entry.transactionType === "OWNER_TAKEN")
+    await clearRedisCache("directorLedger:*");
   //create communication log
   await addCommunicationLogEntry(
     loggedById,
@@ -539,9 +545,6 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     userLocationId,
     entry.directorId || null
   );
-  //clear redis cache
-  await clearRedisCache("cashbook:*");
-  if (entry.transactionType === "OWNER_TAKEN")
-    await clearRedisCache("directorLedger:*");
+
   sendResponse(res, 200, true, "Entry deleted successfully", null);
 });
