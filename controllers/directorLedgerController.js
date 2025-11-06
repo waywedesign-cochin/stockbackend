@@ -344,6 +344,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           referenceId,
           director: { connect: { id: existing.directorId } },
           student: studentId ? { connect: { id: studentId } } : null,
+          locationId:userLocationId
         },
       });
 
