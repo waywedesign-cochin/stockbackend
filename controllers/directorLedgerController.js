@@ -342,8 +342,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
           description,
           referenceId,
-          studentId,
-          directorId: existing.directorId,
+          director: { connect: { id: existing.directorId } },
+          student: studentId ? { connect: { id: studentId } } : null,
         },
       });
 
@@ -382,10 +382,12 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       transactionType,
       debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
       description,
-      directorId: existing.directorId,
       referenceId,
+      director: { connect: { id: existing.directorId } },
+      // student: studentId ? { connect: { id: studentId } } : undefined,
     },
   });
+
   if (!updatedEntry)
     return sendResponse(res, 400, false, "Cashbook entry update failed");
   //create communication log
