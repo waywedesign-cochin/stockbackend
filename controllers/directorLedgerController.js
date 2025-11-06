@@ -343,8 +343,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           description,
           referenceId,
           director: { connect: { id: existing.directorId } },
-          student: studentId ? { connect: { id: studentId } } : null,
-          locationId:userLocationId
+          student: studentId ? { connect: { id: studentId } } : undefined,
+          location: { connect: { id: userLocationId } },
         },
       });
 
@@ -385,7 +385,11 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       description,
       referenceId,
       director: { connect: { id: existing.directorId } },
-      // student: studentId ? { connect: { id: studentId } } : undefined,
+      student: studentId
+        ? { connect: { id: studentId } }
+        : existing.studentId
+        ? { disconnect: true }
+        : undefined,
     },
   });
 
