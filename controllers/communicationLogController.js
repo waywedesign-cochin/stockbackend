@@ -79,7 +79,7 @@ export const getCommunicationLogs = TryCatch(async (req, res) => {
           },
         },
       },
-      director: { select: { id: true, name: true, email: true } },
+      director: { select: { id: true, username: true, email: true } },
       location: { select: { id: true, name: true } },
       loggedBy: {
         select: { id: true, username: true, email: true, role: true },

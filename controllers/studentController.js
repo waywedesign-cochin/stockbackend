@@ -130,16 +130,16 @@ export const getStudents = TryCatch(async (req, res) => {
   //redis cache
   const redisKey = `students:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Students fetched (cached)",
-      cachedResponse
-    );
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Students fetched (cached)",
+  //     cachedResponse
+  //   );
+  // }
 
   // single student by ID
   if (id) {
