@@ -30,15 +30,14 @@ export const updateFee = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
+
   const existingFee = await prisma.fee.findUnique({
     where: { id },
     include: {
       student: {
         include: {
           currentBatch: {
-            include: {
-              course: true,
-            },
+            include: { course: true },
           },
         },
       },
@@ -49,23 +48,45 @@ export const updateFee = TryCatch(async (req, res) => {
     return sendResponse(res, 404, false, "Fee not found", null);
   }
 
-  // Calculate finalDiscount
+  // ----✅ CORRECT CALCULATION STARTS HERE ----
+
+  const existingDiscount = existingFee.discountAmount || 0;
+  const existingBalance = existingFee.balanceAmount || 0;
+
+  const baseFee = existingFee.totalCourseFee
+    ? existingFee.totalCourseFee
+    : existingFee.finalFee + existingDiscount;
+
   const finalDiscount =
-    discountAmount !== undefined ? discountAmount : existingFee.discountAmount;
+    discountAmount !== undefined ? discountAmount : existingDiscount;
 
-  // Update finalFee and balanceAmount based on discount
-  const updatedFinalFee = (existingFee.finalFee || 0) - finalDiscount;
+  const updatedFinalFee = baseFee - finalDiscount;
 
-  const updatedBalance =
+  let alreadyPaid = baseFee - existingDiscount - existingBalance;
+  if (alreadyPaid < 0) alreadyPaid = 0;
+
+  let updatedBalance =
     feePaymentMode === "fullPayment"
       ? 0
-      : existingFee.advanceAmount
-      ? finalDiscount
-        ? existingFee.balanceAmount - finalDiscount
-        : existingFee.balanceAmount
+      : updatedFinalFee - alreadyPaid
+      ? alreadyPaid
       : updatedFinalFee;
 
-  //Update Fee
+  if (updatedBalance < 0) updatedBalance = 0;
+
+  // Debug log
+  console.log({
+    baseFee,
+    existingDiscount,
+    existingBalance,
+    alreadyPaid,
+    finalDiscount,
+    updatedFinalFee,
+    updatedBalance,
+  });
+
+  // ----✅ SAVE UPDATE ----
+
   const fee = await prisma.fee.update({
     where: { id },
     data: {
@@ -73,9 +94,7 @@ export const updateFee = TryCatch(async (req, res) => {
       discountAmount: finalDiscount,
       finalFee: updatedFinalFee,
       balanceAmount: updatedBalance,
-      advanceAmount: existingFee.advanceAmount
-        ? existingFee.advanceAmount
-        : null,
+      advanceAmount: existingFee.advanceAmount || null,
       feePaymentMode,
       status:
         feePaymentMode === "fullPayment" || updatedBalance === 0
@@ -179,6 +198,11 @@ export const updateFee = TryCatch(async (req, res) => {
   //     await prisma.payment.createMany({ data: scheduledPayments });
   //   }
   // }
+
+  //clear redis cache
+  await clearRedisCache("students:*");
+
+  //create communication log
   await addCommunicationLogEntry(
     loggedById,
     "FEE_UPDATED",

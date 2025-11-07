@@ -342,7 +342,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           await tx.fee.update({
             where: { id: oldFee.id },
             data: {
-              balanceAmount: oldFee.balanceAmount + existing.amount,
+              balanceAmount: oldFee.balanceAmount + amount,
               status: "PENDING",
             },
           });
@@ -377,7 +377,12 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       }
 
       const fee = student.fees[0];
-      const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
+      const updatedBalance = Math.max(
+        fee.balanceAmount === null
+          ? fee.balanceAmount + fee.finalFee - amount
+          : fee.balanceAmount - amount,
+        0
+      );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
       await tx.fee.update({
@@ -438,7 +443,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       res,
       200,
       true,
-      "Old entry removed and new entry created with updated student",
+      "Student changed and entry updated successfully",
       newEntry
     );
   }
