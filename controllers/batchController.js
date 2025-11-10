@@ -70,11 +70,11 @@ export const addBatch = TryCatch(async (req, res) => {
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
 
-//get batches
+//GET BATCHES--------------------------------------------------------
 export const getBatches = TryCatch(async (req, res) => {
-  const { id, location, course, status, mode, search } = req.query;
+  const { id, location, course, status, mode, search, year } = req.query;
 
-  //redis cache
+  // Redis cache
   const redisKey = `batches:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
@@ -92,60 +92,59 @@ export const getBatches = TryCatch(async (req, res) => {
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  //batch by id
-  if (id) {
-    const batch = await prisma.batch.findUnique({
-      where: { id },
-      include: {
-        location: true,
-        course: true,
-        students: {
-          select: {
-            admissionNo: true,
-            name: true,
-            email: true,
-          },
-        },
-        _count: {
-          select: {
-            students: true,
-          },
-        },
-      },
-    });
-    if (!batch) {
-      return sendResponse(res, 404, false, "Batch not found", null);
-    }
-    return sendResponse(res, 200, true, "Batch fetched successfully", batch);
+  // ✅ Location required
+  if (!location) {
+    return sendResponse(res, 400, false, "Location is required", null);
   }
-  //filters
-  const where = {};
-  if (location) {
-    where.OR = [
+
+  // ===============================
+  // 🧠 Base Filters
+  // ===============================
+  const where = {
+    OR: [
       { location: { name: { contains: location, mode: "insensitive" } } },
       { locationId: location },
-    ];
+    ],
+  };
+
+  // Course Filters
+  if (course || mode) {
+    where.course = {};
+
+    if (course) {
+      where.course.name = { contains: course, mode: "insensitive" };
+    }
+
+    if (mode) {
+      where.course.mode = { equals: mode }; // no "mode" option here, since it's an enum, not string
+    }
   }
 
-  if (course)
-    where.course = { name: { contains: course, mode: "insensitive" } };
+  //  Status filter
   if (status) where.status = status;
-  if (mode) where.course = { name: { contains: mode, mode: "insensitive" } };
 
+  // Year filter
+  if (year) where.year = Number(year);
+
+  // Search filter
   if (search) {
-    where.OR = [
-      { name: { contains: search, mode: "insensitive" } },
-      { tutor: { contains: search, mode: "insensitive" } },
-      { coordinator: { contains: search, mode: "insensitive" } },
-      { course: { name: { contains: search, mode: "insensitive" } } },
-      { year: { equals: parseInt(search) || undefined } },
-      { location: { name: { contains: search, mode: "insensitive" } } },
+    where.AND = [
+      {
+        OR: [
+          { name: { contains: search, mode: "insensitive" } },
+          { tutor: { contains: search, mode: "insensitive" } },
+          { coordinator: { contains: search, mode: "insensitive" } },
+          { course: { name: { contains: search, mode: "insensitive" } } },
+          { location: { name: { contains: search, mode: "insensitive" } } },
+        ],
+      },
     ];
   }
 
   const totalCount = await prisma.batch.count({ where });
-  const totalPages = Math.ceil(totalCount / limit);
-
+  // ===============================
+  // 📦 Fetch batches
+  // ===============================
   const batches = await prisma.batch.findMany({
     where,
     include: {
@@ -156,40 +155,110 @@ export const getBatches = TryCatch(async (req, res) => {
           name: true,
           baseFee: true,
           duration: true,
+          mode: true,
         },
       },
       students: {
-        select: {
-          admissionNo: true,
-          name: true,
-          email: true,
+        include: {
+          fees: true,
+          payments: true,
         },
       },
-      _count: {
-        select: {
-          students: true,
-        },
-      },
+      _count: { select: { students: true } },
     },
     skip,
     take: limit,
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: { createdAt: "desc" },
   });
 
+  const allBatchesForLocation = await prisma.batch.findMany({
+    where,
+    include: {
+      students: {
+        include: {
+          fees: true,
+          payments: true,
+        },
+      },
+    },
+  });
+  // ===============================
+  // 💰 Calculate Revenue Data
+  // ===============================
+  let totalRevenue = 0;
+  let activeBatches = 0;
+  let totalEnrollment = 0;
+  let availableSlots = 0;
+
+  allBatchesForLocation.forEach((batch) => {
+    const allFees = batch.students.flatMap((s) => s.fees);
+    const allPayments = batch.students.flatMap((s) => s.payments);
+
+    const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    totalRevenue += collected;
+    totalEnrollment += batch.students.length;
+    if (batch.status === "ACTIVE") activeBatches++;
+    availableSlots += batch.slotLimit - batch.currentCount;
+  });
+
+  const dashboardStats = {
+    activeBatches,
+    totalEnrollment,
+    availableSlots,
+    totalRevenue,
+  };
+
+  // ===============================
+  // 🎯 Enhance paginated batches
+  // ===============================
+  const enhancedBatches = batches.map((batch) => {
+    const allFees = batch.students.flatMap((s) => s.fees);
+    const allPayments = batch.students.flatMap((s) => s.payments);
+
+    const totalFee = allFees.reduce((sum, f) => sum + (f.finalFee || 0), 0);
+    const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const pending = totalFee - collected;
+
+    return {
+      id: batch.id,
+      name: batch.name,
+      year: batch.year,
+      slotLimit: batch.slotLimit,
+      currentCount: batch.currentCount,
+      course: batch.course,
+      location: batch.location,
+      tutor: batch.tutor,
+      coordinator: batch.coordinator,
+      status: batch.status,
+      enrollment: `${batch.currentCount}/${batch.slotLimit}`,
+      enrollmentPercent: ((batch.currentCount / batch.slotLimit) * 100).toFixed(
+        0
+      ),
+      totalFee,
+      collected,
+      pending,
+    };
+  });
   const responseData = {
-    batches,
+    dashboardStats,
+    batches: enhancedBatches,
     pagination: {
       currentPage: page,
       limit,
-      totalPages,
+      totalPages: Math.ceil(totalCount / limit),
       totalCount,
     },
   };
+
   await setRedisCache(redisKey, responseData);
 
-  sendResponse(res, 200, true, "Batches fetched successfully", responseData);
+  return sendResponse(
+    res,
+    200,
+    true,
+    "Batches fetched successfully",
+    responseData
+  );
 });
 
 //update batch
