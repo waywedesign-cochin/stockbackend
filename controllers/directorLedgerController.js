@@ -78,7 +78,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         data: {
           amount,
           feeId: fee.id,
-          mode: "CASH",
+          mode: "DIRECTOR",
           studentId,
           paidAt: transactionDate,
           status: "PAID",
