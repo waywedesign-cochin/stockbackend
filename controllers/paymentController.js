@@ -3,6 +3,7 @@ import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import { clearRedisCache } from "../utils/redisCache.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
@@ -182,6 +183,11 @@ export const createPayment = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear cache
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
+
   sendResponse(res, 201, true, "Payment created successfully.", payment);
 });
 
@@ -254,7 +260,7 @@ export const editPayment = TryCatch(async (req, res) => {
     data: {
       balanceAmount: newBalance,
       status: newBalance === 0 ? "PAID" : "PENDING",
-      advanceAmount: isAdvance ? amount : null,
+      advanceAmount: isAdvance ? amount : payment.fee.advanceAmount,
     },
   });
 
@@ -282,6 +288,10 @@ export const editPayment = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear cache
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
 
   sendResponse(res, 200, true, "Payment recorded successfully", {
     payment: updatedPayment,
@@ -318,6 +328,11 @@ export const deletePayment = TryCatch(async (req, res) => {
     payment.studentId || null,
     userLocationId
   );
+  //clear cache
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
+
   sendResponse(res, 200, true, "Payment deleted successfully", payment);
 });
 
@@ -374,6 +389,11 @@ export const createPaymentDue = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear cache
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
+
   return sendResponse(
     res,
     200,
@@ -416,6 +436,11 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       userLocationId
     );
   }
+  //clear cache
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
+
   sendResponse(
     res,
     200,

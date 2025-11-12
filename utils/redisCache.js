@@ -1,8 +1,8 @@
 import redis from "../config/redisClient.js";
 
-export async function setRedisCache(key, value, ttl = 3600) {
+export async function setRedisCache(key, value, ttl = 900) {
   try {
-    await redis.set(key, JSON.stringify(value), "EX", ttl); // 1 hour default
+    await redis.set(key, JSON.stringify(value), "EX", ttl); // 15 minutes default
   } catch (error) {
     console.error("Redis SET error:", error);
   }

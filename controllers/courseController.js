@@ -141,9 +141,10 @@ export const deleteCourse = TryCatch(async (req, res) => {
 export const getCourseReport = TryCatch(async (req, res) => {
   const { locationId } = req.query;
 
-  // 🎯 Get all fees and related course info (filtered by location if provided)
+  // 🎯 Get all active fees and related course info (filtered by location if provided)
   const fees = await prisma.fee.findMany({
     where: {
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
       batch: {
         locationId: locationId && locationId !== "ALL" ? locationId : undefined,
       },
@@ -168,7 +169,11 @@ export const getCourseReport = TryCatch(async (req, res) => {
   const paidPayments = await prisma.payment.groupBy({
     by: ["feeId"],
     _sum: { amount: true },
-    where: { status: "PAID" },
+    where: {
+      status: "PAID", // ✅ only include completed payments
+      paidAt: { not: null }, // ✅ only paid transactions
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+    },
   });
 
   // 🗺️ Map feeId → total paid
@@ -177,27 +182,25 @@ export const getCourseReport = TryCatch(async (req, res) => {
     return acc;
   }, {});
 
-  // 🧠 Compute revenue per course = Final Fee - Total Paid
+  // 🧠 Compute collected revenue per course
   const courseRevenueMap = {};
 
   for (const fee of fees) {
     const courseName = fee.batch?.course?.name;
     if (!courseName) continue;
 
-    const totalFee = fee.finalFee || 0;
-    const paidAmount = paidMap[fee.id] || 0;
-    const remaining = totalFee - paidAmount;
+    const paidAmount = paidMap[fee.id] || 0; // ✅ use collected amount only
 
-    // Add up remaining revenue per course
+    // Add up collected revenue per course
     courseRevenueMap[courseName] =
-      (courseRevenueMap[courseName] || 0) + remaining;
+      (courseRevenueMap[courseName] || 0) + paidAmount;
   }
 
-  // 📊 Format final result
+  // 📊 Format final result (same structure as your existing code)
   const courseRevenueReport = Object.entries(courseRevenueMap).map(
     ([course, revenue]) => ({
       course,
-      revenue,
+      revenue, // ✅ total collected revenue per course
     })
   );
 
@@ -205,3 +208,4 @@ export const getCourseReport = TryCatch(async (req, res) => {
     courseRevenueReport,
   });
 });
+

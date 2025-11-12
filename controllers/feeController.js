@@ -2,6 +2,7 @@ import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
+import { clearRedisCache } from "../utils/redisCache.js";
 
 export const getFees = TryCatch(async (req, res) => {
   const { studentId } = req.params;
@@ -24,7 +25,13 @@ export const getFees = TryCatch(async (req, res) => {
 //update fee
 export const updateFee = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const { discountAmount, feePaymentMode } = req.body;
+  const {
+    discountAmount,
+    feePaymentMode,
+    finalFee,
+    totalCourseFee,
+    balanceAmount,
+  } = req.body;
   const {
     userId: loggedById,
     locationId: userLocationId,
@@ -48,44 +55,50 @@ export const updateFee = TryCatch(async (req, res) => {
     return sendResponse(res, 404, false, "Fee not found", null);
   }
 
-  // ----✅ CORRECT CALCULATION STARTS HERE ----
+  // ----Fee calculations  ----
 
+  // Prefer body values if provided, otherwise fall back to DB values
+  const baseFee = totalCourseFee ?? existingFee.totalCourseFee ?? 0;
   const existingDiscount = existingFee.discountAmount || 0;
   const existingBalance = existingFee.balanceAmount || 0;
 
-  const baseFee = existingFee.totalCourseFee
-    ? existingFee.totalCourseFee
-    : existingFee.finalFee + existingDiscount;
-
+  // Discount may be updated
   const finalDiscount =
     discountAmount !== undefined ? discountAmount : existingDiscount;
 
-  const updatedFinalFee = baseFee - finalDiscount;
+  // Updated final fee (if provided use directly, else recalc)
+  const updatedFinalFee = finalFee ?? baseFee - finalDiscount;
 
+  // Compute how much is already paid
   let alreadyPaid = baseFee - existingDiscount - existingBalance;
   if (alreadyPaid < 0) alreadyPaid = 0;
 
-  let updatedBalance =
-    feePaymentMode === "fullPayment"
-      ? 0
-      : updatedFinalFee - alreadyPaid
-      ? alreadyPaid
-      : updatedFinalFee;
+  // Updated balance — depends on payment mode
+  let updatedBalance;
+  if (balanceAmount !== undefined && balanceAmount !== null) {
+    // if req body has new balanceAmount use that instead of existing balance
+    updatedBalance = balanceAmount;
+  } else if (feePaymentMode === "fullPayment") {
+    updatedBalance = 0;
+  } else {
+    updatedBalance = updatedFinalFee - alreadyPaid;
+  }
 
   if (updatedBalance < 0) updatedBalance = 0;
 
   // Debug log
-  console.log({
-    baseFee,
-    existingDiscount,
-    existingBalance,
-    alreadyPaid,
-    finalDiscount,
-    updatedFinalFee,
-    updatedBalance,
-  });
+  // console.log({
+  //   baseFee,
+  //   existingDiscount,
+  //   existingBalance,
+  //   finalDiscount,
+  //   updatedFinalFee,
+  //   alreadyPaid,
+  //   updatedBalance,
+  //   fromBody: { discountAmount, finalFee, totalCourseFee, balanceAmount },
+  // });
 
-  // ----✅ SAVE UPDATE ----
+  // ----✅ UPDATE DATABASE ----
 
   const fee = await prisma.fee.update({
     where: { id },
@@ -93,6 +106,7 @@ export const updateFee = TryCatch(async (req, res) => {
       batchId: existingFee.student.currentBatchId,
       discountAmount: finalDiscount,
       finalFee: updatedFinalFee,
+      totalCourseFee: baseFee,
       balanceAmount: updatedBalance,
       advanceAmount: existingFee.advanceAmount || null,
       feePaymentMode,
@@ -103,7 +117,7 @@ export const updateFee = TryCatch(async (req, res) => {
     },
   });
 
-  // 1️⃣ Delete Scheduled Payments
+  // ----🧹 CLEAR OLD SCHEDULED PAYMENTS ----
   await prisma.payment.deleteMany({
     where: {
       feeId: id,
@@ -111,7 +125,6 @@ export const updateFee = TryCatch(async (req, res) => {
       dueDate: { not: null },
     },
   });
-
   // if (existingFee.advanceAmount) {
   //   const scheduledPayments = [];
   //   const batchStartDate = existingFee.student.currentBatch.startDate;
@@ -199,8 +212,10 @@ export const updateFee = TryCatch(async (req, res) => {
   //   }
   // }
 
-  //clear redis cache
+  //clear cache
   await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
 
   //create communication log
   await addCommunicationLogEntry(
