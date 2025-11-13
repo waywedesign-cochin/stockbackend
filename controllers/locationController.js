@@ -48,20 +48,26 @@ export const getLocations = TryCatch(async (req, res) => {
   //redis cache
   const redisKey = `locations`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Locations fetched successfully",
-      cachedResponse
-    );
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Locations fetched successfully",
+  //     cachedResponse
+  //   );
+  // }
   const locations = await prisma.location.findMany({
     include: {
-      batches: true,
-      users: true,
+      batches: {
+        select: {
+          id: true,
+        },
+      },
+      users: { select: { id: true } },
+      cashbook: { select: { id: true } },
+      DirectorLedger: { select: { id: true } },
     },
     orderBy: {
       createdAt: "desc",

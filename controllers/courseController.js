@@ -61,7 +61,7 @@ export const getCourses = TryCatch(async (req, res) => {
   }
   const courses = await prisma.course.findMany({
     include: {
-      batches: true,
+      batches: { select: { id: true } },
     },
     orderBy: {
       createdAt: "desc",
@@ -208,4 +208,3 @@ export const getCourseReport = TryCatch(async (req, res) => {
     courseRevenueReport,
   });
 });
-

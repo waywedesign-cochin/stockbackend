@@ -234,8 +234,8 @@ model DirectorLedger {
   description     String?
   referenceId     String? // e.g., Payment ID or Expense ID
 
-  student         Student? @relation(fields: [studentId], references: [id])
-  studentId       String?
+  student   Student? @relation(fields: [studentId], references: [id])
+  studentId String?
 
   location   Location? @relation(fields: [locationId], references: [id])
   locationId String
