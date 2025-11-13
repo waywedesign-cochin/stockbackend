@@ -57,7 +57,7 @@ export const addBatch = TryCatch(async (req, res) => {
       "BATCH_ADDED",
       new Date(),
       "Batch Added",
-      `Batch ${name} has been added by ${userName}.`,
+      `Batch ${name} has been created by ${userName}.`,
       null,
       userLocationId,
       null,
