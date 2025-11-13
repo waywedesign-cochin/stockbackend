@@ -130,16 +130,16 @@ export const getStudents = TryCatch(async (req, res) => {
   //redis cache
   const redisKey = `students:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Students fetched (cached)",
-      cachedResponse
-    );
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Students fetched (cached)",
+  //     cachedResponse
+  //   );
+  // }
 
   // single student by ID
   if (id) {
@@ -662,16 +662,17 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const redisKey = `studentsRevenue:${year}:${quarter}:${locationId}`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Students revenue fetched (cached)",
-      cachedResponse
-    );
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Students revenue fetched (cached)",
+  //     cachedResponse
+  //   );
+  // }
+
   const quarterMonths = {
     Q1: [1, 2, 3],
     Q2: [4, 5, 6],
@@ -686,13 +687,13 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const numericYear = parseInt(year, 10);
 
-  // Date Range
+  // Date range for the given year
   const dateRange = {
     gte: new Date(numericYear, 0, 1),
     lt: new Date(numericYear + 1, 0, 1),
   };
 
-  // Location filter via relation
+  // Location filter through relations
   const locationFilter =
     locationId && locationId !== "all"
       ? {
@@ -704,25 +705,27 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
         }
       : {};
 
-  // --- Step 1: Fetch all fees in one go ---
+  // --- Step 1: Fetch all *active* fees (filtered by date, location) ---
   const allFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
       createdAt: dateRange,
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
     select: { finalFee: true, createdAt: true },
   });
 
-  // --- Step 2: Fetch all payments in one go ---
+  // --- Step 2: Fetch all *active* payments (filtered by date, location) ---
   const allPayments = await prisma.payment.findMany({
     where: {
       ...locationFilter,
       createdAt: dateRange,
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
     select: { amount: true, status: true, createdAt: true },
   });
 
-  // --- Step 3: Prepare monthly summary ---
+  // --- Step 3: Prepare monthly breakdown ---
   const monthNames = [
     "Jan",
     "Feb",
@@ -746,28 +749,39 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       (p) => new Date(p.createdAt).getMonth() + 1 === month
     );
 
+    // total expected (active) fee in this month
     const revenue = fees.reduce((acc, f) => acc + (f.finalFee || 0), 0);
+
+    // total collected (only PAID payments)
     const collections = payments
       .filter((p) => p.status === "PAID")
       .reduce((acc, p) => acc + (p.amount || 0), 0);
-    const outstanding = revenue - collections;
+
+    const outstanding = Math.max(revenue - collections, 0);
 
     return {
       month: monthNames[month - 1],
       revenue,
       collections,
-      outstanding: outstanding > 0 ? outstanding : 0,
+      outstanding,
     };
   });
 
   // --- Step 4: Calculate overall totals (no date filter) ---
   const allFeesNoDate = await prisma.fee.findMany({
-    where: { ...locationFilter },
+    where: {
+      ...locationFilter,
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+    },
     select: { finalFee: true },
   });
 
   const allPaymentsNoDate = await prisma.payment.findMany({
-    where: { ...locationFilter, status: "PAID" },
+    where: {
+      ...locationFilter,
+      status: "PAID",
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+    },
     select: { amount: true },
   });
 
@@ -782,26 +796,25 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     (acc, f) => acc + (f.finalFee || 0),
     0
   );
+
   const totalCollections = allPaymentsNoDate.reduce(
     (acc, p) => acc + (p.amount || 0),
     0
   );
 
-  const outstandingFees =
-    totalRevenue - totalCollections > 0 ? totalRevenue - totalCollections : 0;
+  const outstandingFees = Math.max(totalRevenue - totalCollections, 0);
 
   const collectionRate =
     totalRevenue > 0
       ? ((totalCollections / totalRevenue) * 100).toFixed(2)
       : "0.00";
 
-  // --- Step 5: Calculate Revenue Growth (current month vs previous month using Dates) ---
+  // --- Step 5: Calculate Revenue Growth (Month-over-Month) ---
   const now = new Date();
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-  // Current Month Fees
   const currentMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
@@ -809,11 +822,11 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
         gte: currentMonthStart,
         lt: nextMonthStart,
       },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
     select: { finalFee: true },
   });
 
-  // Previous Month Fees
   const prevMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
@@ -821,6 +834,7 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
         gte: prevMonthStart,
         lt: currentMonthStart,
       },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
     select: { finalFee: true },
   });
@@ -835,15 +849,12 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
   );
 
   let revenueGrowth = 0;
-  if (prevRevenue === 0 && currentRevenue === 0) {
-    revenueGrowth = 0; // no change
-  } else if (prevRevenue > 0 && currentRevenue === 0) {
-    revenueGrowth = -100;
-  } else if (prevRevenue === 0 && currentRevenue > 0) {
-    revenueGrowth = 100;
-  } else if (prevRevenue > 0 && currentRevenue > 0) {
-    revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
-  }
+  if (prevRevenue === 0 && currentRevenue === 0) revenueGrowth = 0;
+  else if (prevRevenue > 0 && currentRevenue === 0) revenueGrowth = -100;
+  else if (prevRevenue === 0 && currentRevenue > 0) revenueGrowth = 100;
+  else revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
+
+  // --- Step 6: New Admissions Count ---
   const newAdmissions = await prisma.student.count({
     where: {
       ...(locationId && locationId !== "all"
@@ -855,7 +866,8 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       },
     },
   });
-  // --- Step 6: Final summary ---
+
+  // --- Step 7: Final summary ---
   const summary = {
     totalRevenue,
     totalCollections,
@@ -865,12 +877,15 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     revenueGrowth: `${revenueGrowth.toFixed(2)}%`,
     newAdmissions,
   };
+
   const responseData = {
     summary,
     monthlyData,
   };
-  //set redis cache
+
+  // cache the result for 1 hour
   await setRedisCache(redisKey, responseData, 3600);
+
   sendResponse(
     res,
     200,

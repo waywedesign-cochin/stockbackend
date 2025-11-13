@@ -77,22 +77,15 @@ export const getBatches = TryCatch(async (req, res) => {
   // Redis cache
   const redisKey = `batches:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Batches fetched successfully",
-      cachedResponse
-    );
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(res, 200, true, "Batches fetched successfully", cachedResponse);
+  // }
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  // ✅ Location required
   if (!location) {
     return sendResponse(res, 400, false, "Location is required", null);
   }
@@ -107,26 +100,15 @@ export const getBatches = TryCatch(async (req, res) => {
     ],
   };
 
-  // Course Filters
   if (course || mode) {
     where.course = {};
-
-    if (course) {
-      where.course.name = { contains: course, mode: "insensitive" };
-    }
-
-    if (mode) {
-      where.course.mode = { equals: mode }; // no "mode" option here, since it's an enum, not string
-    }
+    if (course) where.course.name = { contains: course, mode: "insensitive" };
+    if (mode) where.course.mode = { equals: mode };
   }
 
-  //  Status filter
   if (status) where.status = status;
-
-  // Year filter
   if (year) where.year = Number(year);
 
-  // Search filter
   if (search) {
     where.AND = [
       {
@@ -142,8 +124,9 @@ export const getBatches = TryCatch(async (req, res) => {
   }
 
   const totalCount = await prisma.batch.count({ where });
+
   // ===============================
-  // 📦 Fetch batches
+  // 📦 Fetch batches (Paginated)
   // ===============================
   const batches = await prisma.batch.findMany({
     where,
@@ -161,7 +144,7 @@ export const getBatches = TryCatch(async (req, res) => {
       students: {
         include: {
           fees: true,
-          payments: true,
+          payments: true, // <-- we’ll use payments.feeId
         },
       },
       _count: { select: { students: true } },
@@ -171,6 +154,9 @@ export const getBatches = TryCatch(async (req, res) => {
     orderBy: { createdAt: "desc" },
   });
 
+  // ===============================
+  // 💰 Dashboard Stats
+  // ===============================
   const allBatchesForLocation = await prisma.batch.findMany({
     where,
     include: {
@@ -182,9 +168,7 @@ export const getBatches = TryCatch(async (req, res) => {
       },
     },
   });
-  // ===============================
-  // 💰 Calculate Revenue Data
-  // ===============================
+
   let totalRevenue = 0;
   let activeBatches = 0;
   let totalEnrollment = 0;
@@ -193,8 +177,8 @@ export const getBatches = TryCatch(async (req, res) => {
   allBatchesForLocation.forEach((batch) => {
     const allFees = batch.students.flatMap((s) => s.fees);
     const allPayments = batch.students.flatMap((s) => s.payments);
-
     const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+
     totalRevenue += collected;
     totalEnrollment += batch.students.length;
     if (batch.status === "ACTIVE") activeBatches++;
@@ -211,34 +195,73 @@ export const getBatches = TryCatch(async (req, res) => {
   // ===============================
   // 🎯 Enhance paginated batches
   // ===============================
-  const enhancedBatches = batches.map((batch) => {
-    const allFees = batch.students.flatMap((s) => s.fees);
-    const allPayments = batch.students.flatMap((s) => s.payments);
+  const enhancedBatches = await Promise.all(
+    batches.map(async (batch) => {
+      // 1️⃣ Get all *active* fees directly linked to this batch
+      const fees = await prisma.fee.findMany({
+        where: {
+          batchId: batch.id,
+          // Include only active fees
+          NOT: { status: { in: ["CANCELLED", "INACTIVE"] } }, // exclude inactive fees
+        },
+        select: {
+          id: true,
+          finalFee: true,
+          status: true,
+          payments: {
+            where: {
+              paidAt: { not: null },
+              // Include only active payments if you have a payment status
+              NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+            },
+            select: { amount: true },
+          },
+        },
+      });
 
-    const totalFee = allFees.reduce((sum, f) => sum + (f.finalFee || 0), 0);
-    const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    const pending = totalFee - collected;
+      // 2️⃣ Calculate total fee and collected
+      let totalFee = 0;
+      let collected = 0;
 
-    return {
-      id: batch.id,
-      name: batch.name,
-      year: batch.year,
-      slotLimit: batch.slotLimit,
-      currentCount: batch.currentCount,
-      course: batch.course,
-      location: batch.location,
-      tutor: batch.tutor,
-      coordinator: batch.coordinator,
-      status: batch.status,
-      enrollment: `${batch.currentCount}/${batch.slotLimit}`,
-      enrollmentPercent: ((batch.currentCount / batch.slotLimit) * 100).toFixed(
-        0
-      ),
-      totalFee,
-      collected,
-      pending,
-    };
-  });
+      for (const fee of fees) {
+        totalFee += fee.finalFee || 0;
+        const totalPayments = fee.payments.reduce(
+          (sum, p) => sum + (p.amount || 0),
+          0
+        );
+        collected += totalPayments;
+      }
+
+      // 3️⃣ Calculate pending
+      const pending = Math.max(totalFee - collected, 0);
+
+      // 4️⃣ Return final summarized object
+      return {
+        id: batch.id,
+        name: batch.name,
+        year: batch.year,
+        slotLimit: batch.slotLimit,
+        currentCount: batch.currentCount,
+        course: batch.course,
+        location: batch.location,
+        tutor: batch.tutor,
+        coordinator: batch.coordinator,
+        status: batch.status,
+        enrollment: `${batch.currentCount}/${batch.slotLimit}`,
+        enrollmentPercent: (
+          (batch.currentCount / (batch.slotLimit || 1)) *
+          100
+        ).toFixed(0),
+        totalFee,
+        collected,
+        pending,
+      };
+    })
+  );
+
+  // ===============================
+  // 🚀 Final Response
+  // ===============================
   const responseData = {
     dashboardStats,
     batches: enhancedBatches,
