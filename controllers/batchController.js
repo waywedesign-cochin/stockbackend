@@ -60,6 +60,7 @@ export const addBatch = TryCatch(async (req, res) => {
       `Batch ${name} has been added by ${userName}.`,
       null,
       userLocationId,
+      null,
       batch.id
     );
 
@@ -335,6 +336,7 @@ export const updateBatch = TryCatch(async (req, res) => {
       `Batch ${name} has been updated by ${userName}.`,
       null,
       userLocationId,
+      null,
       batch.id
     );
     //redis cache clear
@@ -367,6 +369,7 @@ export const deleteBatch = TryCatch(async (req, res) => {
       `Batch ${batch.name} has been deleted by ${userName}.`,
       null,
       userLocationId,
+      null,
       batch.id
     );
     //redis cache clear
