@@ -241,6 +241,7 @@ export const getBatches = TryCatch(async (req, res) => {
         id: batch.id,
         name: batch.name,
         year: batch.year,
+        startDate: batch.startDate,
         slotLimit: batch.slotLimit,
         currentCount: batch.currentCount,
         course: batch.course,
