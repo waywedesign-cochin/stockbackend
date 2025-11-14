@@ -1,7 +1,6 @@
 import { sendResponse } from "../utils/responseHandler.js";
 import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
-import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
 import { clearRedisCache } from "../utils/redisCache.js";
 
@@ -162,14 +161,6 @@ export const createPayment = TryCatch(async (req, res) => {
       status: "PAID",
     },
   });
-  try {
-    await sendSlotBookingEmail(existingFee);
-    console.log(
-      `Slot booking email sent for student ${existingFee.student.name}`
-    );
-  } catch (err) {
-    console.error("Error sending slot booking email:", err);
-  }
 
   //create communication log
   if (payment) {
@@ -263,18 +254,6 @@ export const editPayment = TryCatch(async (req, res) => {
       advanceAmount: isAdvance ? amount : payment.fee.advanceAmount,
     },
   });
-
-  //send slot booking email if isAdvance is true
-  if (isAdvance) {
-    try {
-      await sendSlotBookingEmail(updatedFee);
-      console.log(
-        `Slot booking email sent for student ${updatedFee.student.name}`
-      );
-    } catch (err) {
-      console.error("Error sending slot booking email:", err);
-    }
-  }
 
   //create communication log
   if (updatedPayment) {

@@ -7,6 +7,7 @@ import {
   getRedisCache,
   setRedisCache,
 } from "../utils/redisCache.js";
+import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 
 //add student
 export const addStudent = TryCatch(async (req, res) => {
@@ -85,6 +86,16 @@ export const addStudent = TryCatch(async (req, res) => {
   }
 
   if (student) {
+    //send slot booking email
+    try {
+      await sendSlotBookingEmail(existingFee);
+      console.log(
+        `Slot booking email sent for student ${existingFee.student.name}`
+      );
+    } catch (err) {
+      console.error("Error sending slot booking email:", err);
+    }
+    //create communication log
     await addCommunicationLogEntry(
       loggedById,
       "STUDENT_ADDED",
