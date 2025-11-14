@@ -10,7 +10,7 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false, // true for 465
   auth: {
-    user: "midhunzz017@gmail.com",
+    user: process.env.CLIENT_EMAIL,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
 });
@@ -25,7 +25,7 @@ async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
   });
 
   const mailOptions = {
-    from: '"SK & SL Associate Private Limited" <no-reply@sk&sl-associate-private-limited.com>',
+    from: `SK & SL Associate Private Limited" <no-reply@${process.env.CLIENT_EMAIL}>`,
     to: studentEmail,
     subject: "Payment Due Reminder",
     text: `Hello ${studentName},\n\nYou have a payment of ₹${amount.toLocaleString()} due on ${formattedDate}. Please make the payment on time.\n\nThank you!`,

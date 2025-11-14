@@ -6,7 +6,7 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false,
   auth: {
-    user: "midhunzz017@gmail.com",
+    user: process.env.CLIENT_EMAIL,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
 });
@@ -24,7 +24,7 @@ export const sendSlotBookingEmail = async (fee) => {
   });
 
   const mailOptions = {
-    from: '"SK & SL Associate Private Limited" <no-reply@sk&sl-associate-private-limited.com>',
+    from: `SK & SL Associate Private Limited" <no-reply@${process.env.CLIENT_EMAIL}>`,
     to: student?.email,
     subject: "🎯 Slot Booking Confirmation",
     text: `Hello ${student?.name},
