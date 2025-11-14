@@ -6,7 +6,7 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false,
   auth: {
-    user: "midhunzz017@gmail.com",
+    user: process.env.CLIENT_EMAIL,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
 });
@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
 // Function to send a modern password reset email
 export const sendPasswordResetEmail = async (user, resetLink) => {
   const mailOptions = {
-    from: '"SK & SL Associate Private Limited" <no-reply@sk&sl-associate-private-limited.com>',
+    from: `SK & SL Associate Private Limited" <no-reply@${process.env.CLIENT_EMAIL}>`,
     to: user.email,
     subject: "🔒 Reset Your Password – SK & SL Associate Private Limited",
     text: `Hello ${user.name},
