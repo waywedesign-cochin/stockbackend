@@ -80,6 +80,13 @@ export const addStudent = TryCatch(async (req, res) => {
       studentId: student.id,
       batchId: student.currentBatchId,
     },
+    include: {
+      student: {
+        include: {
+          currentBatch: true,
+        },
+      },
+    },
   });
   if (!fee) {
     return sendResponse(res, 500, false, "Failed to add fee", null);
@@ -88,10 +95,8 @@ export const addStudent = TryCatch(async (req, res) => {
   if (student) {
     //send slot booking email
     try {
-      await sendSlotBookingEmail(existingFee);
-      console.log(
-        `Slot booking email sent for student ${existingFee.student.name}`
-      );
+      await sendSlotBookingEmail(fee);
+      console.log(`Slot booking email sent for student ${fee.student.name}`);
     } catch (err) {
       console.error("Error sending slot booking email:", err);
     }
@@ -109,7 +114,7 @@ export const addStudent = TryCatch(async (req, res) => {
   //clear redis cache for student and revenue details
   await clearRedisCache("students:*");
   await clearRedisCache("studentsRevenue:*");
-  sendResponse(res, 200, true, "Student added successfully with fee", {
+  sendResponse(res, 200, true, "Student added and slot booking email sent", {
     student,
     fee,
   });
