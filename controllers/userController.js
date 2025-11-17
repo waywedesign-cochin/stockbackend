@@ -229,9 +229,7 @@ export const forgotPassword = TryCatch(async (req, res) => {
   if (resetLink) {
     sendPasswordResetEmail(user, resetLink);
   }
-  sendResponse(res, 200, true, "Password reset link sent successfully", {
-    resetLink,
-  });
+  sendResponse(res, 200, true, "Password reset link sent successfully", null);
 });
 
 //reset password
