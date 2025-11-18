@@ -59,7 +59,12 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       }
 
       const fee = student.fees[0];
-      const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
+      const updatedBalance = Math.max(
+        fee.balanceAmount !== null
+          ? fee.balanceAmount - amount
+          : fee.balanceAmount + fee.finalFee - amount,
+        0
+      );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
       await tx.cashbook.update({
