@@ -223,37 +223,75 @@ export const editPayment = TryCatch(async (req, res) => {
 
   if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
 
-  // Update Payment
-  const updatedPayment = await prisma.payment.update({
-    where: { id: paymentId },
-    data: {
-      amount,
-      mode,
-      dueDate,
-      transactionId,
-      note,
-      paidAt,
-      status: paidAt ? "PAID" : "PENDING",
-    },
-  });
+  const { updatedPayment, updatedFee } = await prisma.$transaction(
+    async (tx) => {
+      // Update Payment
+      const updatedPayment = await tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          amount,
+          mode,
+          dueDate,
+          transactionId,
+          note,
+          paidAt,
+          status: paidAt ? "PAID" : "PENDING",
+        },
+      });
 
-  // Recalculate Fee balance
-  const totalPaid = await prisma.payment.aggregate({
-    where: { feeId: payment.feeId, status: "PAID" },
-    _sum: { amount: true },
-  });
+      // Recalculate Fee balance
+      const totalPaid = await tx.payment.aggregate({
+        where: { feeId: payment.feeId, status: "PAID" },
+        _sum: { amount: true },
+      });
 
-  const newBalance = (payment.fee.finalFee || 0) - (totalPaid._sum.amount || 0);
+      const newBalance =
+        (payment.fee.finalFee || 0) - (totalPaid._sum.amount || 0);
 
-  const updatedFee = await prisma.fee.update({
-    where: { id: payment.feeId },
-    include: { student: true },
-    data: {
-      balanceAmount: newBalance,
-      status: newBalance === 0 ? "PAID" : "PENDING",
-      advanceAmount: isAdvance ? amount : payment.fee.advanceAmount,
-    },
-  });
+      const updatedFee = await tx.fee.update({
+        where: { id: payment.feeId },
+        include: { student: true },
+        data: {
+          balanceAmount: newBalance,
+          status: newBalance === 0 ? "PAID" : "PENDING",
+          advanceAmount: isAdvance ? amount : payment.fee.advanceAmount,
+        },
+      });
+
+      if (payment.cashbookId && payment.mode === "CASH") {
+        await tx.cashbook.update({
+          where: { id: payment.cashbookId },
+          data: {
+            amount: amount,
+            transactionDate: paidAt,
+            transactionType: "STUDENT_PAID",
+            debitCredit: "CREDIT",
+            description: note,
+            referenceId: transactionId,
+          },
+        });
+        //clear cashbook cache
+        await clearRedisCache("cashbook:*");
+      }
+      if (payment.directorLedgerId && payment.mode === "DIRECTOR") {
+        await tx.directorLedger.update({
+          where: { id: payment.directorLedgerId },
+          data: {
+            amount: amount,
+            transactionDate: paidAt,
+            transactionType: "STUDENT_PAID",
+            debitCredit: "CREDIT",
+            description: note,
+            referenceId: transactionId,
+          },
+        });
+        //clear director ledger cache
+        await clearRedisCache("directorLedger:*");
+      }
+
+      return { updatedPayment, updatedFee };
+    }
+  );
 
   //create communication log
   if (updatedPayment) {
