@@ -13,9 +13,6 @@ import cashbookRouter from "./routes/cashbook.js";
 import directorLedgerRouter from "./routes/directorLedger.js";
 import communicationLogRouter from "./routes/communicationLog.js";
 
-//due reminder cron job
-import "./utils/dueReminderCron.js";
-
 const app = express();
 
 // Parse JSON requests

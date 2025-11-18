@@ -1,4 +1,3 @@
-import cron from "node-cron";
 import { PrismaClient } from "@prisma/client";
 import nodemailer from "nodemailer";
 
@@ -6,16 +5,16 @@ const prisma = new PrismaClient();
 
 // Configure your email transporter
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com", // e.g., smtp.gmail.com
+  host: "smtp.gmail.com",
   port: 587,
-  secure: false, // true for 465
+  secure: false,
   auth: {
     user: process.env.CLIENT_EMAIL,
     pass: process.env.GMAIL_APP_PASSWORD,
   },
 });
 
-// Function to send email
+// Your original email template (unchanged)
 async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
   const formattedDate = dueDate.toLocaleDateString("en-US", {
     weekday: "long",
@@ -56,16 +55,22 @@ async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
     `,
   };
 
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Email sent to ${studentEmail}`);
-  } catch (err) {
-    console.error("Error sending email:", err);
+  return transporter.sendMail(mailOptions);
+}
+
+// BATCH sending (sending 10 emails at once)
+async function sendInBatches(emailList, batchSize = 10) {
+  for (let i = 0; i < emailList.length; i += batchSize) {
+    const batch = emailList.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map((data) =>
+        sendDueEmail(data.email, data.name, data.amount, data.dueDate)
+      )
+    );
   }
 }
 
-// Cron job: runs every day at 08:00 AM
-cron.schedule("0 8 * * *", async () => {
+export async function runDueReminderCron() {
   console.log("Running daily due reminder cron job...");
 
   const todayStart = new Date();
@@ -75,35 +80,29 @@ cron.schedule("0 8 * * *", async () => {
   todayEnd.setHours(23, 59, 59, 999);
 
   try {
-    // Find students with due today
+    // Fetch students with dues today
     const students = await prisma.student.findMany({
       where: {
         fees: {
           some: {
             payments: {
               some: {
-                dueDate: {
-                  gte: todayStart,
-                  lte: todayEnd,
-                },
-                status: "PENDING", // only unpaid payments
+                dueDate: { gte: todayStart, lte: todayEnd },
+                status: "PENDING",
               },
             },
           },
         },
       },
       include: {
-        fees: {
-          include: {
-            payments: true,
-          },
-        },
+        fees: { include: { payments: true } },
       },
     });
 
-    // Send emails
+    // Build email list (your same logic)
+    const emailList = [];
+
     for (const student of students) {
-      // Find payments due today for this student
       for (const fee of student.fees) {
         for (const payment of fee.payments) {
           if (
@@ -111,19 +110,22 @@ cron.schedule("0 8 * * *", async () => {
             payment.dueDate >= todayStart &&
             payment.dueDate <= todayEnd
           ) {
-            await sendDueEmail(
-              student.email,
-              student.name,
-              payment.amount,
-              payment.dueDate
-            );
+            emailList.push({
+              email: student.email,
+              name: student.name,
+              amount: payment.amount,
+              dueDate: payment.dueDate,
+            });
           }
         }
       }
     }
 
+    // Send emails in batches
+    await sendInBatches(emailList);
+
     console.log("Daily due reminder cron job completed.");
   } catch (err) {
     console.error("Error in cron job:", err);
   }
-});
+}
