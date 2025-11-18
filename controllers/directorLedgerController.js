@@ -63,8 +63,20 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
       }
 
       const fee = student.fees[0];
-      const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
+      const updatedBalance = Math.max(
+        fee.balanceAmount !== null
+          ? fee.balanceAmount - amount
+          : fee.balanceAmount + fee.finalFee - amount,
+        0
+      );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
+
+      await tx.directorLedger.update({
+        where: { id: newEntry.id },
+        data: {
+          feeId: fee.id,
+        },
+      });
 
       await tx.fee.update({
         where: { id: fee.id },
@@ -83,6 +95,8 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
           paidAt: transactionDate,
           status: "PAID",
           note: description || "Cash payment recorded",
+          directorLedgerId: newEntry.id,
+          transactionId: referenceId || null,
         },
       });
     }
@@ -310,7 +324,12 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       }
 
       const fee = student.fees[0];
-      const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
+      const updatedBalance = Math.max(
+        fee.balanceAmount !== null
+          ? fee.balanceAmount - amount
+          : fee.balanceAmount + fee.finalFee - amount,
+        0
+      );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
       await tx.fee.update({
@@ -318,18 +337,6 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         data: {
           balanceAmount: updatedBalance,
           status: newStatus,
-        },
-      });
-
-      await tx.payment.create({
-        data: {
-          amount,
-          feeId: fee.id,
-          mode: "CASH",
-          studentId,
-          paidAt: transactionDate,
-          status: "PAID",
-          note: description || "Director ledger payment updated",
         },
       });
 
@@ -345,6 +352,21 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           director: { connect: { id: existing.directorId } },
           student: studentId ? { connect: { id: studentId } } : undefined,
           location: { connect: { id: userLocationId } },
+          feeId: fee.id,
+        },
+      });
+
+      await tx.payment.create({
+        data: {
+          amount,
+          feeId: fee.id,
+          mode: "CASH",
+          studentId,
+          paidAt: transactionDate,
+          status: "PAID",
+          note: description || "Director ledger payment updated",
+          transactionId: referenceId || null,
+          directorLedgerId: entry.id,
         },
       });
 
@@ -375,22 +397,69 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
   }
 
   // If studentId same or not linked to student
-  const updatedEntry = await prisma.directorLedger.update({
-    where: { id },
-    data: {
-      transactionDate,
-      amount,
-      transactionType,
-      debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
-      description,
-      referenceId,
-      director: { connect: { id: existing.directorId } },
-      student: studentId
-        ? { connect: { id: studentId } }
-        : existing.studentId
-        ? { disconnect: true }
-        : undefined,
-    },
+  const updatedEntry = await prisma.$transaction(async (tx) => {
+    const result = await tx.directorLedger.update({
+      where: { id },
+      data: {
+        transactionDate,
+        amount,
+        transactionType,
+        debitCredit: transactionType === "OTHER_EXPENSE" ? "DEBIT" : "CREDIT",
+        description,
+        referenceId,
+        director: { connect: { id: existing.directorId } },
+        student: studentId
+          ? { connect: { id: studentId } }
+          : existing.studentId
+          ? { disconnect: true }
+          : undefined,
+      },
+    });
+
+    // If linked to student, update fee and payment
+    if (studentId) {
+      //fetch fee linked to director ledger
+      const fee = await tx.fee.findUnique({
+        where: { id: existing.feeId },
+        include: { payments: true },
+      });
+
+      // fetch old payment record connected to this director ledger entry
+      const oldPayment = await tx.payment.findUnique({
+        where: { directorLedgerId: id },
+      });
+
+      if (fee && oldPayment) {
+        const updatedBalance = Math.max(
+          fee.balanceAmount + oldPayment.amount - amount,
+          0
+        );
+        const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
+        // Update fee
+        await tx.fee.update({
+          where: { id: fee.id },
+          data: {
+            balanceAmount: updatedBalance,
+            status: newStatus,
+          },
+        });
+        // Update payment created based on this director ledger entry
+        await tx.payment.update({
+          where: { directorLedgerId: id },
+          data: {
+            amount,
+            feeId: fee.id,
+            mode: "CASH",
+            studentId,
+            paidAt: transactionDate,
+            status: "PAID",
+            note: description || "Director ledger payment updated",
+            transactionId: referenceId || null,
+          },
+        });
+      }
+    }
+    return result;
   });
 
   if (!updatedEntry)
@@ -434,25 +503,25 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
     );
 
   // if linked to student, reverse fee and payment
-  if (entry.studentId) {
+  if (entry.studentId && entry.transactionType === "STUDENT_PAID") {
     await prisma.$transaction(async (tx) => {
       // 1️⃣ Reverse fee update for old student
-      if (entry.student) {
-        const oldFee = entry.student.fees[0];
-        if (oldFee) {
+      if (entry.feeId) {
+        const fee = await tx.fee.findUnique({
+          where: { id: entry.feeId },
+        });
+        if (fee) {
           await tx.fee.update({
-            where: { id: oldFee.id },
+            where: { id: entry.feeId },
             data: {
-              balanceAmount: oldFee.balanceAmount + entry.amount,
+              balanceAmount: fee.balanceAmount + entry.amount,
               status: "PENDING",
             },
           });
 
           await tx.payment.deleteMany({
             where: {
-              studentId: entry.studentId,
-              amount: entry.amount,
-              feeId: oldFee.id,
+              directorLedgerId: id,
             },
           });
         }
@@ -461,6 +530,10 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       // 2️⃣ Delete old cashbook entry
       await tx.directorLedger.delete({ where: { id } });
     });
+
+    //clear redis cache
+    await clearRedisCache("directorLedger:*");
+
     //create communication log
     await addCommunicationLogEntry(
       loggedById,
@@ -472,13 +545,12 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       userLocationId,
       entry.directorId || null
     );
-    //clear redis cache
-    await clearRedisCache("directorLedger:*");
+
     return sendResponse(
       res,
       200,
       true,
-      "Old entry removed and new entry created with updated student",
+      "Director ledger entry deleted successfully, fee and payment reversed",
       null
     );
   }

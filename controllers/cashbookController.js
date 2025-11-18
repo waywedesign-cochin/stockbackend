@@ -92,7 +92,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
           status: "PAID",
           note: description || "Cash payment recorded",
           cashbookId: newEntry.id,
-          transactionId: referenceId,
+          transactionId: referenceId || null,
         },
       });
     }
@@ -431,7 +431,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           status: "PAID",
           note: description || "Cash payment updated",
           transactionId: entry.id,
-          cashbookId: entry.referenceId,
+          cashbookId: entry.referenceId || null,
         },
       });
 
@@ -577,7 +577,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
             paidAt: transactionDate,
             status: "PAID",
             note: description || "Cash payment updated",
-            transactionId: updatedEntry.referenceId,
+            transactionId: updatedEntry.referenceId || null,
           },
         });
       }
