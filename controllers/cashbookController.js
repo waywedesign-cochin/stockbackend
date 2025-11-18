@@ -62,6 +62,13 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       const updatedBalance = Math.max(fee.balanceAmount - amount, 0);
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
+      await tx.cashbook.update({
+        where: { id: newEntry.id },
+        data: {
+          feeId: fee.id,
+        },
+      });
+
       await tx.fee.update({
         where: { id: fee.id },
         data: {
@@ -79,6 +86,8 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
           paidAt: transactionDate,
           status: "PAID",
           note: description || "Cash payment recorded",
+          cashbookId: newEntry.id,
+          transactionId: referenceId,
         },
       });
     }
@@ -349,9 +358,8 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
 
           await tx.payment.deleteMany({
             where: {
+              cashbookId: id,
               studentId: existing.studentId,
-              amount: existing.amount,
-              feeId: oldFee.id,
             },
           });
         }
@@ -375,7 +383,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
         sendResponse(res, 400, false, "No fee record found for this student");
         return;
       }
-
+      //update fee for new student
       const fee = student.fees[0];
       const updatedBalance = Math.max(
         fee.balanceAmount === null
@@ -393,19 +401,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
         },
       });
 
-      await tx.payment.create({
-        data: {
-          amount,
-          feeId: fee.id,
-          mode: "CASH",
-          studentId,
-          paidAt: transactionDate,
-          status: "PAID",
-          note: description || "Cash payment updated",
-        },
-      });
-
-      // 4️⃣ Create new cashbook entry
+      // Create new cashbook entry
       const entry = await tx.cashbook.create({
         data: {
           transactionDate,
@@ -416,10 +412,25 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           referenceId,
           studentId,
           locationId: userLocationId,
+          feeId: fee.id,
         },
       });
 
-      // return so Prisma can commit and give it back
+      await tx.payment.create({
+        data: {
+          amount,
+          feeId: fee.id,
+          mode: "CASH",
+          studentId,
+          paidAt: transactionDate,
+          status: "PAID",
+          note: description || "Cash payment updated",
+          transactionId: entry.id,
+          cashbookId: entry.referenceId,
+        },
+      });
+
+      //return new entry
       return entry;
     });
     if (!newEntry)
@@ -510,17 +521,66 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
   }
 
   // If studentId is same, simple update
-  const updatedEntry = await prisma.cashbook.update({
-    where: { id },
-    data: {
-      transactionDate,
-      amount,
-      transactionType,
-      debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
-      description,
-      referenceId,
-    },
+  const result = await prisma.$transaction(async (tx) => {
+    const updatedEntry = await tx.cashbook.update({
+      where: { id },
+      data: {
+        transactionDate,
+        amount,
+        transactionType,
+        debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+        description,
+        referenceId,
+      },
+    });
+
+    // if linked to student, update fee and payment amount
+    if (studentId) {
+      //fetch fee linked to cashbook
+      const fee = await tx.fee.findUnique({
+        where: { id: existing.feeId },
+        include: { payments: true },
+      });
+
+      // fetch old payment record connected to this cashbook entry
+      const oldPayment = await tx.payment.findUnique({
+        where: { cashbookId: id },
+      });
+
+      if (fee && oldPayment) {
+        const updatedBalance = Math.max(
+          fee.balanceAmount + oldPayment.amount - amount,
+          0
+        );
+        const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
+        //update fee
+        await tx.fee.update({
+          where: { id: fee.id },
+          data: {
+            balanceAmount: updatedBalance,
+            status: newStatus,
+          },
+        });
+        //update payment created based on this cashbook entry
+        await tx.payment.update({
+          where: { cashbookId: id },
+          data: {
+            amount,
+            feeId: fee.id,
+            mode: "CASH",
+            studentId,
+            paidAt: transactionDate,
+            status: "PAID",
+            note: description || "Cash payment updated",
+            transactionId: updatedEntry.referenceId,
+          },
+        });
+      }
+    }
+    return updatedEntry;
   });
+
+  //if linked to director ledger, update there too
   if (transactionType === "OWNER_TAKEN") {
     await prisma.directorLedger.updateMany({
       where: { cashbookId: id },
@@ -533,7 +593,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     });
   }
 
-  if (!updatedEntry)
+  if (!result)
     return sendResponse(res, 400, false, "Cashbook entry update failed");
 
   //create communication log
@@ -550,9 +610,9 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
 
   //clear redis cache
   await clearRedisCache("cashbook:*");
-  if (updatedEntry.transactionType === "OWNER_TAKEN")
+  if (result.transactionType === "OWNER_TAKEN")
     await clearRedisCache("directorLedger:*");
-  sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
+  sendResponse(res, 200, true, "Entry updated successfully", result);
 });
 
 //DELETE CASHBOOK ENTRY----------------------------------------------------------------
@@ -563,46 +623,49 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
+
+  // Fetch entry with student + fee
   const entry = await prisma.cashbook.findUnique({
     where: { id },
-    include: { student: { include: { fees: true } } },
+    include: {
+      student: true,
+      fee: true,
+    },
   });
 
-  if (!entry)
-    return sendResponse(res, 404, false, "Cashbook entry not found", null);
+  if (!entry) return sendResponse(res, 404, false, "Cashbook entry not found");
 
-  // if linked to student, reverse fee and payment
-  if (entry.studentId && entry.transactionType === "STUDENT_PAID") {
+  // ================================================================
+  // CASE 1: STUDENT_PAID — reverse fee & payment then delete entry
+  // ================================================================
+  if (entry.transactionType === "STUDENT_PAID" && entry.studentId) {
     await prisma.$transaction(async (tx) => {
-      // 1️⃣ Reverse fee update for old student
-      if (entry.student) {
-        const oldFee = entry.student.fees[0];
-        if (oldFee) {
+      // Reverse fee update
+      if (entry.feeId) {
+        const fee = await tx.fee.findUnique({ where: { id: entry.feeId } });
+
+        if (fee) {
           await tx.fee.update({
-            where: { id: oldFee.id },
+            where: { id: entry.feeId },
             data: {
-              balanceAmount: oldFee.balanceAmount + entry.amount,
+              balanceAmount: fee.balanceAmount + entry.amount,
               status: "PENDING",
             },
           });
-
-          await tx.payment.deleteMany({
-            where: {
-              studentId: entry.studentId,
-              amount: entry.amount,
-              feeId: oldFee.id,
-            },
-          });
         }
+
+        // Delete payment
+        await tx.payment.deleteMany({ where: { cashbookId: id } });
       }
 
-      // 2️⃣ Delete old cashbook entry
+      // Delete cashbook entry related to student payment
       await tx.cashbook.delete({ where: { id } });
     });
-    //clear redis cache
+
+    // Clear Redis cache
     await clearRedisCache("cashbook:*");
 
-    //create communication log
+    // Log activity
     await addCommunicationLogEntry(
       loggedById,
       "CASHBOOK_ENTRY_DELETED",
@@ -613,26 +676,53 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       userLocationId,
       null
     );
+
+    return sendResponse(res, 200, true, "Entry deleted successfully", null);
   }
+
+  // ================================================================
+  // CASE 2: OWNER_TAKEN — delete ledger + delete cashbook
+  // ================================================================
   if (entry.transactionType === "OWNER_TAKEN" && entry.directorId) {
-    await prisma.directorLedger.deleteMany({ where: { cashbookId: id } });
-  }
-  await prisma.cashbook.delete({ where: { id } });
-  //clear redis cache
-  await clearRedisCache("cashbook:*");
-  if (entry.transactionType === "OWNER_TAKEN")
+    await prisma.$transaction(async (tx) => {
+      await tx.directorLedger.deleteMany({ where: { cashbookId: id } });
+      await tx.cashbook.delete({ where: { id } });
+    });
+
+    await clearRedisCache("cashbook:*");
     await clearRedisCache("directorLedger:*");
-  //create communication log
+
+    await addCommunicationLogEntry(
+      loggedById,
+      "CASHBOOK_ENTRY_DELETED",
+      new Date(),
+      "Cashbook entry deleted",
+      `Cashbook entry deleted by ${userName}.`,
+      null,
+      userLocationId,
+      entry.directorId || null
+    );
+
+    return sendResponse(res, 200, true, "Entry deleted successfully", null);
+  }
+
+  // ================================================================
+  // CASE 3: Other transaction types
+  // ================================================================
+  await prisma.cashbook.delete({ where: { id } });
+
+  await clearRedisCache("cashbook:*");
+
   await addCommunicationLogEntry(
     loggedById,
     "CASHBOOK_ENTRY_DELETED",
     new Date(),
     "Cashbook entry deleted",
-    `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
+    `Cashbook entry deleted by ${userName}.`,
     entry.studentId || null,
     userLocationId,
     entry.directorId || null
   );
 
-  sendResponse(res, 200, true, "Entry deleted successfully", null);
+  return sendResponse(res, 200, true, "Entry deleted successfully", null);
 });

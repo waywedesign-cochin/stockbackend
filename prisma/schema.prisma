@@ -147,27 +147,34 @@ model Fee {
   batchHistoryTo   batchHistory[] @relation("FeeToBatchHistory")
 
   transferId String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  cashbooks       cashbook[]
+  directorLedgers DirectorLedger[]
 
   @@map("fees")
 }
 
 model Payment {
-  id            String    @id @default(uuid())
-  amount        Int
-  mode          String?
-  paidAt        DateTime?
-  dueDate       DateTime?
-  transactionId String?
-  note          String?
-  status        String    @default("PENDING")
-  student       Student   @relation(fields: [studentId], references: [id])
-  studentId     String
-  fee           Fee       @relation(fields: [feeId], references: [id])
-  feeId         String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String          @id @default(uuid())
+  amount           Int
+  mode             String?
+  paidAt           DateTime?
+  dueDate          DateTime?
+  transactionId    String?
+  note             String?
+  status           String          @default("PENDING")
+  student          Student         @relation(fields: [studentId], references: [id])
+  studentId        String
+  fee              Fee             @relation(fields: [feeId], references: [id])
+  feeId            String
+  cashbook         cashbook?       @relation(fields: [cashbookId], references: [id])
+  cashbookId       String?         @unique
+  directorLedger   DirectorLedger? @relation(fields: [directorLedgerId], references: [id])
+  directorLedgerId String?         @unique
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@map("payments")
 }
@@ -219,6 +226,9 @@ model cashbook {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   directorLedgers DirectorLedger[]
+  payments        Payment[]
+  fee             Fee?             @relation(fields: [feeId], references: [id])
+  feeId           String?
 
   @@map("cashbooks")
 }
@@ -243,8 +253,11 @@ model DirectorLedger {
   cashbookId String? // e.g., Cashbook ID created when owner taken entry added in cashbook
   cashbook   cashbook? @relation(fields: [cashbookId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  payments  Payment[]
+  fee       Fee?      @relation(fields: [feeId], references: [id])
+  feeId     String?
 
   @@map("director_ledgers")
 }

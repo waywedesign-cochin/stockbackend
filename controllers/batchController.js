@@ -78,10 +78,10 @@ export const getBatches = TryCatch(async (req, res) => {
   // Redis cache
   const redisKey = `batches:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
-  // if (cachedResponse) {
-  //   console.log("📦 Serving from Redis Cache");
-  //   return sendResponse(res, 200, true, "Batches fetched successfully", cachedResponse);
-  // }
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(res, 200, true, "Batches fetched successfully", cachedResponse);
+  }
 
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;

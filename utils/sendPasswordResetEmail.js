@@ -17,7 +17,7 @@ export const sendPasswordResetEmail = async (user, resetLink) => {
     from: `SK & SL Associate Private Limited" <no-reply@${process.env.CLIENT_EMAIL}>`,
     to: user.email,
     subject: "🔒 Reset Your Password – SK & SL Associate Private Limited",
-    text: `Hello ${user.name},
+    text: `Hello ${user.username},
 
 We received a request to reset your password.
 
@@ -35,7 +35,7 @@ SK & SL Associate Private Limited
           <h1 style="margin: 0; font-size: 24px;">Password Reset Request</h1>
         </div>
         <div style="padding: 24px; color: #333;">
-          <p>Hello <strong>${user.name}</strong>,</p>
+          <p>Hello <strong>${user.username}</strong>,</p>
           <p>We received a request to reset your password for your SK & SL Associate Private Limited account.</p>
           <p>If this was you, click the button below to securely reset your password:</p>
           
