@@ -1,7 +1,8 @@
 {
+  "version": 2,
   "crons": [
     {
-      "path": "/cron/due-reminder",
+      "path": "/api/due-reminder",
       "schedule": "30 2 * * *"
     }
   ]
