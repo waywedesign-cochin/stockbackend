@@ -784,9 +784,11 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
   });
 
   // --- Step 4: Calculate overall totals (no date filter) ---
+  const batchYearFilter = year && !isNaN(year) ? { year: Number(year) } : {};
   const allFeesNoDate = await prisma.fee.findMany({
     where: {
       ...locationFilter,
+      batch: batchYearFilter,
       NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
     select: { finalFee: true },
@@ -795,6 +797,9 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
   const allPaymentsNoDate = await prisma.payment.findMany({
     where: {
       ...locationFilter,
+      fee: {
+        batch: batchYearFilter, //  match by fee.batch.year
+      },
       status: "PAID",
       NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
@@ -802,10 +807,14 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
   });
 
   const totalStudents = await prisma.student.count({
-    where:
-      locationId && locationId !== "all"
-        ? { currentBatch: { locationId: locationId } }
-        : {},
+    where: {
+      ...(locationId && locationId !== "all"
+        ? { currentBatch: { locationId } }
+        : {}),
+      currentBatch: {
+        ...batchYearFilter, //  match by batch.year
+      },
+    },
   });
 
   const totalRevenue = allFeesNoDate.reduce(
@@ -827,10 +836,13 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   // --- Step 5: Calculate Revenue Growth (Month-over-Month) ---
   const now = new Date();
+
+  // Month range (based on current system month)
   const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
+  // Fetch fees for current month
   const currentMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
@@ -843,6 +855,7 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     select: { finalFee: true },
   });
 
+  // Fetch fees for previous month
   const prevMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
@@ -859,16 +872,24 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     (acc, f) => acc + (f.finalFee || 0),
     0
   );
+
   const prevRevenue = prevMonthFees.reduce(
     (acc, f) => acc + (f.finalFee || 0),
     0
   );
 
+  // ---  GROWTH LOGIC ---
   let revenueGrowth = 0;
-  if (prevRevenue === 0 && currentRevenue === 0) revenueGrowth = 0;
-  else if (prevRevenue > 0 && currentRevenue === 0) revenueGrowth = -100;
-  else if (prevRevenue === 0 && currentRevenue > 0) revenueGrowth = 100;
-  else revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
+
+  if (prevRevenue === 0) {
+    // If previous month = 0, growth depends entirely on current
+    revenueGrowth = currentRevenue > 0 ? 100 : 0;
+  } else {
+    // Normal percentage growth calculation
+    revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
+  }
+
+  revenueGrowth = Number(revenueGrowth.toFixed(2));
 
   // --- Step 6: New Admissions Count ---
   const newAdmissions = await prisma.student.count({
