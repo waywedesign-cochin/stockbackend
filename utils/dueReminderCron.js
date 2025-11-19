@@ -123,6 +123,7 @@ export async function runDueReminderCron() {
 
     // Send emails in batches
     await sendInBatches(emailList);
+    console.log("Due reminder email has been sent to", emailList);
 
     console.log("Daily due reminder cron job completed.");
   } catch (err) {
