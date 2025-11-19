@@ -84,8 +84,10 @@ export const getBatches = TryCatch(async (req, res) => {
   }
 
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+
+  let limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 10;
+  const skip = limit === 0 ? undefined : (page - 1) * limit;
+  const take = limit === 0 ? undefined : limit;
 
   if (!location) {
     return sendResponse(res, 400, false, "Location is required", null);
@@ -151,7 +153,7 @@ export const getBatches = TryCatch(async (req, res) => {
       _count: { select: { students: true } },
     },
     skip,
-    take: limit,
+   take,
     orderBy: { createdAt: "desc" },
   });
 
