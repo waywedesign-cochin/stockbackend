@@ -678,16 +678,16 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const redisKey = `studentsRevenue:${year}:${quarter}:${locationId}`;
   const cachedResponse = await getRedisCache(redisKey);
-  // if (cachedResponse) {
-  //   console.log("📦 Serving from Redis Cache");
-  //   return sendResponse(
-  //     res,
-  //     200,
-  //     true,
-  //     "Students revenue fetched (cached)",
-  //     cachedResponse
-  //   );
-  // }
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Students revenue fetched (cached)",
+      cachedResponse
+    );
+  }
 
   const quarterMonths = {
     Q1: [1, 2, 3],
@@ -835,17 +835,20 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       : "0.00";
 
   // --- Step 5: Calculate Revenue Growth (Month-over-Month) ---
+  const selectedYear = Number(year);
   const now = new Date();
+  const currentMonthIndex = now.getMonth(); // keep same month number
 
-  // Month range (based on current system month)
-  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  // Month range but USING SELECTED YEAR
+  const currentMonthStart = new Date(selectedYear, currentMonthIndex, 1);
+  const nextMonthStart = new Date(selectedYear, currentMonthIndex + 1, 1);
+  const prevMonthStart = new Date(selectedYear, currentMonthIndex - 1, 1);
 
-  // Fetch fees for current month
+  // Fetch fees for selected year's current month
   const currentMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
+      batch: batchYearFilter, // VERY IMPORTANT
       createdAt: {
         gte: currentMonthStart,
         lt: nextMonthStart,
@@ -855,10 +858,11 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     select: { finalFee: true },
   });
 
-  // Fetch fees for previous month
+  // Fetch fees for selected year's previous month
   const prevMonthFees = await prisma.fee.findMany({
     where: {
       ...locationFilter,
+      batch: batchYearFilter,
       createdAt: {
         gte: prevMonthStart,
         lt: currentMonthStart,
@@ -878,14 +882,12 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     0
   );
 
-  // ---  GROWTH LOGIC ---
+  // Correct growth logic
   let revenueGrowth = 0;
 
   if (prevRevenue === 0) {
-    // If previous month = 0, growth depends entirely on current
     revenueGrowth = currentRevenue > 0 ? 100 : 0;
   } else {
-    // Normal percentage growth calculation
     revenueGrowth = ((currentRevenue - prevRevenue) / prevRevenue) * 100;
   }
 
@@ -897,6 +899,9 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       ...(locationId && locationId !== "all"
         ? { currentBatch: { locationId: locationId } }
         : {}),
+      currentBatch: {
+        ...batchYearFilter,
+      },
       createdAt: {
         gte: currentMonthStart,
         lt: nextMonthStart,
