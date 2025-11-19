@@ -12,6 +12,7 @@ import batchHistoryRouter from "./routes/batchHistory.js";
 import cashbookRouter from "./routes/cashbook.js";
 import directorLedgerRouter from "./routes/directorLedger.js";
 import communicationLogRouter from "./routes/communicationLog.js";
+import { runDueReminderCron } from "./utils/dueReminderCron.js";
 
 const app = express();
 
@@ -48,6 +49,9 @@ app.use("/api/batch-history", batchHistoryRouter);
 app.use("/api/cashbook", cashbookRouter);
 app.use("/api/director-ledger", directorLedgerRouter);
 app.use("/api/communication", communicationLogRouter);
+//cron job route
+app.get("/api/due-reminder", runDueReminderCron);
+
 const port = process.env.PORT || 3001;
 
 app.listen(port, () => console.log(`🚀 Server running on port ${port}`));
