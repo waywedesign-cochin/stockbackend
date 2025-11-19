@@ -13,8 +13,9 @@ import {
 //signup
 export const signUp = TryCatch(async (req, res) => {
   const { username, email, password } = req.body;
+  const emailLower = email.toLowerCase();
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { email: emailLower },
   });
   if (user) {
     return sendResponse(res, 400, false, "User already exists", null);
@@ -23,7 +24,7 @@ export const signUp = TryCatch(async (req, res) => {
   const newUser = await prisma.user.create({
     data: {
       username,
-      email,
+      email: emailLower,
       password: hashedPassword,
     },
   });
@@ -41,8 +42,8 @@ export const signUp = TryCatch(async (req, res) => {
 
 export const login = TryCatch(async (req, res) => {
   const { email, password } = req.body;
-
-  const user = await prisma.user.findUnique({ where: { email } });
+  const emailLower = email.toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email: emailLower } });
   if (!user) {
     return sendResponse(res, 400, false, "Invalid email or password", null);
   }
@@ -79,8 +80,6 @@ export const login = TryCatch(async (req, res) => {
 
 // Get currently logged-in user
 export const getCurrentUser = TryCatch(async (req, res) => {
-  console.log(req);
-
   if (!req.user) {
     return sendResponse(res, 401, false, "Not authenticated", null);
   }
@@ -145,11 +144,12 @@ export const getUser = TryCatch(async (req, res) => {
 export const updateUser = TryCatch(async (req, res) => {
   const { id } = req.params;
   const { username, email, password, role, locationId } = req.body;
+  const emailLower = email.toLowerCase();
   const user = await prisma.user.update({
     where: { id },
     data: {
       username,
-      email,
+      email: emailLower,
       password,
       role,
       locationId,
@@ -209,8 +209,9 @@ export const changePassword = TryCatch(async (req, res) => {
 //forgot password
 export const forgotPassword = TryCatch(async (req, res) => {
   const { email } = req.body;
+  const emailLower = email.toLowerCase();
   const user = await prisma.user.findUnique({
-    where: { email },
+    where: { email: emailLower },
   });
   if (!user) {
     return sendResponse(res, 404, false, "User not found", null);
@@ -218,7 +219,7 @@ export const forgotPassword = TryCatch(async (req, res) => {
   const resetToken = crypto.randomBytes(20).toString("hex");
   const resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 min
   await prisma.user.update({
-    where: { email },
+    where: { email: emailLower },
     data: {
       resetPasswordToken: resetToken,
       resetPasswordExpires: resetTokenExpiry,
