@@ -140,8 +140,12 @@ export const getStudents = TryCatch(async (req, res) => {
   } = req.query;
 
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
-  const skip = (page - 1) * limit;
+
+  let limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 10;
+
+  // If limit = 0 → take all (no pagination)
+  const skip = limit === 0 ? undefined : (page - 1) * limit;
+  const take = limit === 0 ? undefined : limit;
 
   //redis cache
   const redisKey = `students:${JSON.stringify(req.query)}`;
@@ -516,7 +520,7 @@ export const getStudents = TryCatch(async (req, res) => {
       },
     },
     skip,
-    take: limit,
+    take,
     orderBy: { createdAt: "desc" },
   });
 
