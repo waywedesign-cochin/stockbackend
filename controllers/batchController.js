@@ -111,7 +111,7 @@ export const getBatches = TryCatch(async (req, res) => {
 
   if (course || mode) {
     where.course = {};
-    if (course) where.course.name = { contains: course, mode: "insensitive" };
+    if (course) where.course.id = { contains: course, mode: "insensitive" };
     if (mode) where.course.mode = { equals: mode };
   }
 
