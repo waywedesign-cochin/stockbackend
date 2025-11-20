@@ -7,7 +7,6 @@ import {
   getRedisCache,
   setRedisCache,
 } from "../utils/redisCache.js";
-import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 
 //add student
 export const addStudent = TryCatch(async (req, res) => {
@@ -92,29 +91,10 @@ export const addStudent = TryCatch(async (req, res) => {
     return sendResponse(res, 500, false, "Failed to add fee", null);
   }
 
-  if (student) {
-    //send slot booking email
-    try {
-      await sendSlotBookingEmail(fee);
-      console.log(`Slot booking email sent for student ${fee.student.name}`);
-    } catch (err) {
-      console.error("Error sending slot booking email:", err);
-    }
-    //create communication log
-    await addCommunicationLogEntry(
-      loggedById,
-      "STUDENT_ADDED",
-      new Date(),
-      "Student Added",
-      `A new student ${student.name} to ${student.currentBatch.name} has been added by ${userName} and fee has been created.`,
-      student.id,
-      userLocationId
-    );
-  }
   //clear redis cache for student and revenue details
   await clearRedisCache("students:*");
   await clearRedisCache("studentsRevenue:*");
-  sendResponse(res, 200, true, "Student added and slot booking email sent", {
+  sendResponse(res, 200, true, "Student added and fee created successfully", {
     student,
     fee,
   });

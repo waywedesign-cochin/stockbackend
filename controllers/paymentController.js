@@ -3,6 +3,7 @@ import { TryCatch } from "../utils/TryCatch.js";
 import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
 import { clearRedisCache } from "../utils/redisCache.js";
+import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
@@ -37,99 +38,12 @@ export const createPayment = TryCatch(async (req, res) => {
   //calculate balance
   const updatedBalance = existingFee.balanceAmount - amount;
 
-  // if (isAdvance) {
-  //   const scheduledPayments = [];
-  //   const batchStartDate = existingFee.student.currentBatch.startDate;
-
-  //   if (existingFee.feePaymentMode === "weekly") {
-  //     const batchStart = new Date(batchStartDate);
-  //     const courseName =
-  //       existingFee.student.currentBatch.course.name.toUpperCase();
-
-  //     // Define installment mapping for all courses
-  //     const installmentMap = {
-  //       "STOCK OFFLINE": [5000, 10000, 10000, 5400],
-  //       "FOREX OFFLINE": [5000, 10000, 10000, 5400],
-  //       "STOCK ONLINE": [5000, 5000, 5000, 5000],
-  //       "FOREX ONLINE": [5000, 5000, 5000, 5000],
-  //       "STOCK AND FOREX COMBINED (ONLINE)": [16000, 8000, 8000, 7600],
-  //       "STOCK AND FOREX COMBINED (OFFLINE)": [
-  //         20500, 10500, 10500, 10500, 10800,
-  //       ],
-  //       "STOCK AND FOREX COMBINED (ONLINE+OFFLINE)": [
-  //         18200, 11000, 11000, 11000,
-  //       ],
-  //       // Add more combinations if needed
-  //     };
-
-  //     const perWeek = installmentMap[courseName] || [
-  //       existingFee.balanceAmount / 4,
-  //     ]; // fallback
-
-  //     perWeek.forEach((amount, index) => {
-  //       const dueDate = new Date(batchStart);
-  //       dueDate.setDate(dueDate.getDate() + index * 7); // first week = batchStartDate
-
-  //       scheduledPayments.push({
-  //         amount,
-  //         dueDate,
-  //         studentId: existingFee.studentId,
-  //         feeId: existingFee.id,
-  //       });
-  //     });
-  //   }
-  //   let perPayment;
-
-  //   if (existingFee.feePaymentMode === "70/30") {
-  //     const courseName =
-  //       existingFee.student.currentBatch.course.name.toUpperCase();
-
-  //     // Define fixed amounts per course if needed
-  //     const coursePaymentMap = {
-  //       "STOCK OFFLINE": [19000, 11400], // example
-  //       "FOREX OFFLINE": [19000, 11400],
-  //       "STOCK ONLINE": [11000, 9000],
-  //       "FOREX ONLINE": [11000, 9000],
-  //     };
-
-  //     // Use mapped amounts if available, else fallback to 70/30 split
-  //     perPayment = coursePaymentMap[courseName] || [
-  //       Math.round(existingFee.balanceAmount * 0.7),
-  //       existingFee.balanceAmount - Math.round(existingFee.balanceAmount * 0.7),
-  //     ];
-
-  //     const firstDue = new Date(
-  //       batchStartDate > new Date() ? batchStartDate : new Date()
-  //     );
-  //     const secondDue = new Date(firstDue);
-  //     secondDue.setMonth(secondDue.getMonth() + 1);
-
-  //     scheduledPayments.push(
-  //       {
-  //         amount: perPayment[0],
-  //         dueDate: firstDue,
-  //         studentId: existingFee.studentId,
-  //         feeId: existingFee.id,
-  //       },
-  //       {
-  //         amount: perPayment[1],
-  //         dueDate: secondDue,
-  //         studentId: existingFee.studentId,
-  //         feeId: existingFee.id,
-  //       }
-  //     );
-  //   }
-
-  //   // scheduled payments
-  //   if (scheduledPayments.length > 0) {
-  //     await prisma.payment.createMany({ data: scheduledPayments });
-  //   }
-  // }
-
   //update fee table
-
   const updatedFee = await prisma.fee.update({
     where: { id: feeId },
+    include: {
+      student: { include: { currentBatch: { include: { course: true } } } },
+    },
     data: {
       balanceAmount: updatedBalance,
       advanceAmount: isAdvance ? amount : existingFee.advanceAmount || null,
@@ -164,6 +78,16 @@ export const createPayment = TryCatch(async (req, res) => {
 
   //create communication log
   if (payment) {
+    //send slot booking email
+    try {
+      await sendSlotBookingEmail(updatedFee);
+      console.log(
+        `Slot booking email sent for student ${updatedFee.student.name}`
+      );
+    } catch (err) {
+      console.error("Error sending slot booking email:", err);
+    }
+    //create communication log
     await addCommunicationLogEntry(
       loggedById,
       "PAYMENT_CREATED",
@@ -250,7 +174,9 @@ export const editPayment = TryCatch(async (req, res) => {
 
       const updatedFee = await tx.fee.update({
         where: { id: payment.feeId },
-        include: { student: true },
+        include: {
+          student: { include: { currentBatch: { include: { course: true } } } },
+        },
         data: {
           balanceAmount: newBalance,
           status: newBalance === 0 ? "PAID" : "PENDING",
@@ -295,6 +221,18 @@ export const editPayment = TryCatch(async (req, res) => {
 
   //create communication log
   if (updatedPayment) {
+    //send slot booking email
+    if (isAdvance) {
+      try {
+        await sendSlotBookingEmail(updatedFee);
+        console.log(
+          `Slot booking email sent for student ${updatedFee.student.name}`
+        );
+      } catch (err) {
+        console.error("Error sending slot booking email:", err);
+      }
+    }
+    //create communication log
     await addCommunicationLogEntry(
       loggedById,
       "PAYMENT_UPDATED",
