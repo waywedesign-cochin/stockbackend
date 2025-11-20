@@ -78,10 +78,16 @@ export const getBatches = TryCatch(async (req, res) => {
   // Redis cache
   const redisKey = `batches:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(res, 200, true, "Batches fetched successfully", cachedResponse);
-  }
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Batches fetched successfully",
+  //     cachedResponse
+  //   );
+  // }
 
   const page = parseInt(req.query.page) || 1;
 
@@ -153,7 +159,7 @@ export const getBatches = TryCatch(async (req, res) => {
       _count: { select: { students: true } },
     },
     skip,
-   take,
+    take,
     orderBy: { createdAt: "desc" },
   });
 
@@ -173,15 +179,21 @@ export const getBatches = TryCatch(async (req, res) => {
   });
 
   let totalRevenue = 0;
+  let outstandingFees = 0;
   let activeBatches = 0;
   let totalEnrollment = 0;
   let availableSlots = 0;
-
+  let totalFees = 0;
   allBatchesForLocation.forEach((batch) => {
     const allFees = batch.students.flatMap((s) => s.fees);
     const allPayments = batch.students.flatMap((s) => s.payments);
+    const totalFeeForBatch = allFees.reduce(
+      (sum, f) => sum + (f.finalFee || 0),
+      0
+    );
     const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-
+    totalFees += totalFeeForBatch;
+    outstandingFees += totalFeeForBatch - collected;
     totalRevenue += collected;
     totalEnrollment += batch.students.length;
     if (batch.status === "ACTIVE") activeBatches++;
@@ -193,6 +205,8 @@ export const getBatches = TryCatch(async (req, res) => {
     totalEnrollment,
     availableSlots,
     totalRevenue,
+    outstandingFees,
+    totalFees,
   };
 
   // ===============================
