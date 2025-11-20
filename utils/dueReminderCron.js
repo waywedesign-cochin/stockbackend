@@ -73,21 +73,26 @@ async function sendInBatches(emailList, batchSize = 10) {
 export async function runDueReminderCron() {
   console.log("Running daily due reminder cron job...");
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  // ------------------------------
+  // FIND DUE PAYMENTS FOR TOMORROW
+  // ------------------------------
+  const tomorrowStart = new Date();
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+  tomorrowStart.setHours(0, 0, 0, 0);
 
-  const todayEnd = new Date();
-  todayEnd.setHours(23, 59, 59, 999);
+  const tomorrowEnd = new Date();
+  tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+  tomorrowEnd.setHours(23, 59, 59, 999);
 
   try {
-    // Fetch students with dues today
+    // Find students who have due TOMORROW
     const students = await prisma.student.findMany({
       where: {
         fees: {
           some: {
             payments: {
               some: {
-                dueDate: { gte: todayStart, lte: todayEnd },
+                dueDate: { gte: tomorrowStart, lte: tomorrowEnd },
                 status: "PENDING",
               },
             },
@@ -99,7 +104,6 @@ export async function runDueReminderCron() {
       },
     });
 
-    // Build email list (your same logic)
     const emailList = [];
 
     for (const student of students) {
@@ -107,8 +111,8 @@ export async function runDueReminderCron() {
         for (const payment of fee.payments) {
           if (
             payment.status === "PENDING" &&
-            payment.dueDate >= todayStart &&
-            payment.dueDate <= todayEnd
+            payment.dueDate >= tomorrowStart &&
+            payment.dueDate <= tomorrowEnd
           ) {
             emailList.push({
               email: student.email,
@@ -121,9 +125,10 @@ export async function runDueReminderCron() {
       }
     }
 
-    // Send emails in batches
+    // Send emails in batches of 10
     await sendInBatches(emailList);
-    console.log("Due reminder email has been sent to", emailList);
+
+    console.log("Reminder sent for TOMORROW's dues:", emailList);
 
     console.log("Daily due reminder cron job completed.");
   } catch (err) {
