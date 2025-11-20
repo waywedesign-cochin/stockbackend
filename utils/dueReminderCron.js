@@ -3,7 +3,7 @@ import nodemailer from "nodemailer";
 
 const prisma = new PrismaClient();
 
-// Configure your email transporter
+// EMAIL TRANSPORTER (Gmail)
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
@@ -14,7 +14,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// Your original email template (unchanged)
+// SEND EMAIL (TEMPLATE UNCHANGED)
 async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
   const formattedDate = dueDate.toLocaleDateString("en-US", {
     weekday: "long",
@@ -58,34 +58,71 @@ async function sendDueEmail(studentEmail, studentName, amount, dueDate) {
   return transporter.sendMail(mailOptions);
 }
 
-// BATCH sending (sending 10 emails at once)
-async function sendInBatches(emailList, batchSize = 10) {
-  for (let i = 0; i < emailList.length; i += batchSize) {
-    const batch = emailList.slice(i, i + batchSize);
-    await Promise.all(
-      batch.map((data) =>
-        sendDueEmail(data.email, data.name, data.amount, data.dueDate)
-      )
-    );
+// ------------------------------------------
+// SAFE SEND (3 retries + backoff)
+// ------------------------------------------
+async function safeSendEmail(data, retries = 3) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      await sendDueEmail(data.email, data.name, data.amount, data.dueDate);
+      return { ok: true };
+    } catch (err) {
+      if (attempt === retries) {
+        return { ok: false, error: err };
+      }
+      await new Promise((res) => setTimeout(res, 500 * (attempt + 1)));
+    }
   }
 }
 
-export async function runDueReminderCron() {
-  console.log("Running daily due reminder cron job...");
+// ------------------------------------------
+// SAFE BATCHING (no batch stops)
+// ------------------------------------------
+async function sendInBatches(emailList, batchSize = 10) {
+  for (let i = 0; i < emailList.length; i += batchSize) {
+    const batch = emailList.slice(i, i + batchSize);
 
-  // ------------------------------
-  // FIND DUE PAYMENTS FOR TOMORROW
-  // ------------------------------
-  const tomorrowStart = new Date();
+    const results = await Promise.allSettled(
+      batch.map((data) => safeSendEmail(data))
+    );
+
+    results.forEach((result, index) => {
+      const item = batch[index];
+      if (result.status === "fulfilled" && result.value.ok) {
+        console.log(`Email sent ---> ${item.email}`);
+      } else {
+        console.error(
+          `Failed ---> ${item.email}`,
+          result.reason || result.value.error
+        );
+      }
+    });
+
+    // Small delay to prevent Gmail rate-limit
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
+
+// ------------------------------------------
+// MAIN CRON FUNCTION
+// ------------------------------------------
+export async function runDueReminderCron() {
+  console.log("Running daily due reminder cron...");
+
+  // Calculate TOMORROW in IST safely
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+
+  const tomorrowStart = new Date(nowIST);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
   tomorrowStart.setHours(0, 0, 0, 0);
 
-  const tomorrowEnd = new Date();
-  tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+  const tomorrowEnd = new Date(tomorrowStart);
   tomorrowEnd.setHours(23, 59, 59, 999);
 
   try {
-    // Find students who have due TOMORROW
+    // Fetch students with TOMORROW’S due payments (no DB modification)
     const students = await prisma.student.findMany({
       where: {
         fees: {
@@ -125,13 +162,13 @@ export async function runDueReminderCron() {
       }
     }
 
-    // Send emails in batches of 10
+    // Batch-send emails
     await sendInBatches(emailList);
 
-    console.log("Reminder sent for TOMORROW's dues:", emailList);
-
-    console.log("Daily due reminder cron job completed.");
+    console.log("Reminder emails sent:", emailList.length);
   } catch (err) {
-    console.error("Error in cron job:", err);
+    console.error("Cron error:", err);
+  } finally {
+    await prisma.$disconnect();
   }
 }
