@@ -84,7 +84,7 @@ SK & SL Associate Private Limited
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Updated slot booking email sent to ${student?.email}`);
+    console.log(`Slot booking email sent to ${student?.email}`);
   } catch (err) {
     console.error("Error sending slot booking email:", err);
   }

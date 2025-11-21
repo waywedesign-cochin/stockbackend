@@ -7,6 +7,7 @@ import {
   getRedisCache,
   setRedisCache,
 } from "../utils/redisCache.js";
+import { sendFeeCompletionEmail } from "../utils/sendFeeCompletionMail.js";
 
 //ADD DIRECTOR LEDGER ENTRY---------------------------------------------
 export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
@@ -24,6 +25,10 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
+
+  // to track if fee completed
+  let updatedFeeId = null;
+
   const result = await prisma.$transaction(async (tx) => {
     // Create director ledger entry
     const newEntry = await tx.directorLedger.create({
@@ -78,7 +83,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         },
       });
 
-      await tx.fee.update({
+      const updatedFee = await tx.fee.update({
         where: { id: fee.id },
         data: {
           balanceAmount: updatedBalance,
@@ -99,12 +104,41 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
           transactionId: referenceId || null,
         },
       });
+
+      // check if fee completed
+      if (updatedFee.status === "PAID") {
+        updatedFeeId = updatedFee.id;
+      }
     }
 
     return newEntry;
   });
   // final response
-  if (!result) return;
+  if (!result)
+    return sendResponse(res, 400, false, "Ledger entry creation failed");
+
+  if (updatedFeeId) {
+    const latestFee = await prisma.fee.findUnique({
+      where: { id: updatedFeeId },
+      include: {
+        student: {
+          include: {
+            currentBatch: {
+              include: {
+                course: true,
+              },
+            },
+          },
+        },
+        payments: true,
+      },
+    });
+    try {
+      await sendFeeCompletionEmail(latestFee);
+    } catch (err) {
+      console.error("Error sending slot booking email:", err);
+    }
+  }
   // Add communication log entry
   await addCommunicationLogEntry(
     loggedById,
@@ -266,6 +300,10 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
+
+  // to track if fee completed
+  let updatedFeeId = null;
+
   const existing = await prisma.directorLedger.findUnique({
     where: { id },
     include: { student: { include: { fees: true } } },
@@ -332,7 +370,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
-      await tx.fee.update({
+      const updatedFee = await tx.fee.update({
         where: { id: fee.id },
         data: {
           balanceAmount: updatedBalance,
@@ -352,7 +390,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           director: { connect: { id: existing.directorId } },
           student: studentId ? { connect: { id: studentId } } : undefined,
           location: { connect: { id: userLocationId } },
-          feeId: fee.id,
+          fee: { connect: { id: fee.id } },
         },
       });
 
@@ -360,7 +398,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         data: {
           amount,
           feeId: fee.id,
-          mode: "CASH",
+          mode: "DIRECTOR",
           studentId,
           paidAt: transactionDate,
           status: "PAID",
@@ -370,10 +408,38 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         },
       });
 
+      //to track if fee completed
+      if (updatedFee.status === "PAID") {
+        updatedFeeId = updatedFee.id;
+      }
+      //return entry
       return entry;
     });
     if (!newEntry)
       return sendResponse(res, 400, false, "Transaction failed or incomplete");
+    if (updatedFeeId) {
+      const latestFee = await prisma.fee.findUnique({
+        where: { id: updatedFeeId },
+        include: {
+          student: {
+            include: {
+              currentBatch: {
+                include: {
+                  course: true,
+                },
+              },
+            },
+          },
+          payments: true,
+        },
+      });
+      try {
+        await sendFeeCompletionEmail(latestFee);
+      } catch (err) {
+        console.error("Error sending slot booking email:", err);
+      }
+    }
+    //create communication log
     await addCommunicationLogEntry(
       loggedById,
       "DIRECTOR_LEDGER_ENTRY_UPDATED",
@@ -436,7 +502,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         );
         const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
         // Update fee
-        await tx.fee.update({
+        const updatedFee = await tx.fee.update({
           where: { id: fee.id },
           data: {
             balanceAmount: updatedBalance,
@@ -449,7 +515,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           data: {
             amount,
             feeId: fee.id,
-            mode: "CASH",
+            mode: "DIRECTOR",
             studentId,
             paidAt: transactionDate,
             status: "PAID",
@@ -457,6 +523,10 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
             transactionId: referenceId || null,
           },
         });
+        //to track if fee completed
+        if (updatedFee.status === "PAID") {
+          updatedFeeId = updatedFee.id;
+        }
       }
     }
     return result;
@@ -464,6 +534,30 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
 
   if (!updatedEntry)
     return sendResponse(res, 400, false, "Cashbook entry update failed");
+
+  //if fee completed send fee completion mail
+  if (updatedFeeId) {
+    const latestFee = await prisma.fee.findUnique({
+      where: { id: updatedFeeId },
+      include: {
+        student: {
+          include: {
+            currentBatch: {
+              include: {
+                course: true,
+              },
+            },
+          },
+        },
+        payments: true,
+      },
+    });
+    try {
+      await sendFeeCompletionEmail(latestFee);
+    } catch (err) {
+      console.error("Error sending slot booking email:", err);
+    }
+  }
   //create communication log
   await addCommunicationLogEntry(
     loggedById,
