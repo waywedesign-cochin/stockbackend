@@ -4,6 +4,7 @@ import prisma from "../config/prismaClient.js";
 import { addCommunicationLogEntry } from "./communicationLogController.js";
 import { clearRedisCache } from "../utils/redisCache.js";
 import { sendSlotBookingEmail } from "../utils/slotConfirmationMail.js";
+import { sendFeeCompletionEmail } from "../utils/sendFeeCompletionMail.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
@@ -42,7 +43,11 @@ export const createPayment = TryCatch(async (req, res) => {
   const updatedFee = await prisma.fee.update({
     where: { id: feeId },
     include: {
-      student: { include: { currentBatch: { include: { course: true } } } },
+      student: {
+        include: {
+          currentBatch: { include: { course: true } },
+        },
+      },
     },
     data: {
       balanceAmount: updatedBalance,
@@ -63,6 +68,7 @@ export const createPayment = TryCatch(async (req, res) => {
       },
     });
   }
+
   const payment = await prisma.payment.create({
     data: {
       amount,
@@ -79,13 +85,38 @@ export const createPayment = TryCatch(async (req, res) => {
   //create communication log
   if (payment) {
     //send slot booking email
-    try {
-      await sendSlotBookingEmail(updatedFee);
-      console.log(
-        `Slot booking email sent for student ${updatedFee.student.name}`
-      );
-    } catch (err) {
-      console.error("Error sending slot booking email:", err);
+    if (isAdvance) {
+      try {
+        await sendSlotBookingEmail(updatedFee);
+        // console.log(
+        //   `Slot booking email sent for student ${updatedFee.student.name}`
+        // );
+      } catch (err) {
+        console.error("Error sending slot booking email:", err);
+      }
+    }
+
+    if (updatedFee && updatedFee.status === "PAID") {
+      const latestFee = await prisma.fee.findUnique({
+        where: { id: updatedFee.id },
+        include: {
+          student: {
+            include: {
+              currentBatch: {
+                include: {
+                  course: true,
+                },
+              },
+            },
+          },
+          payments: true,
+        },
+      });
+      try {
+        await sendFeeCompletionEmail(latestFee);
+      } catch (err) {
+        console.error("Error sending slot booking email:", err);
+      }
     }
     //create communication log
     await addCommunicationLogEntry(
@@ -228,6 +259,29 @@ export const editPayment = TryCatch(async (req, res) => {
         console.log(
           `Slot booking email sent for student ${updatedFee.student.name}`
         );
+      } catch (err) {
+        console.error("Error sending slot booking email:", err);
+      }
+    }
+    //If fee payment completed sent mail
+    if (updatedFee && updatedFee.status === "PAID") {
+      const latestFee = await prisma.fee.findUnique({
+        where: { id: updatedFee.id },
+        include: {
+          student: {
+            include: {
+              currentBatch: {
+                include: {
+                  course: true,
+                },
+              },
+            },
+          },
+          payments: true,
+        },
+      });
+      try {
+        await sendFeeCompletionEmail(latestFee);
       } catch (err) {
         console.error("Error sending slot booking email:", err);
       }
