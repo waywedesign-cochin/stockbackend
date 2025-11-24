@@ -29,6 +29,7 @@ model User {
   DirectorLedger         DirectorLedger[]
   resetPasswordToken     String?
   resetPasswordExpires   DateTime?
+  bankTransactions       bankTransaction[]
 }
 
 model Location {
@@ -42,6 +43,7 @@ model Location {
   cashbook         cashbook[]
   DirectorLedger   DirectorLedger[]
   CommunicationLog CommunicationLog[]
+  bankTransactions bankTransaction[]
 
   @@map("locations")
 }
@@ -121,6 +123,7 @@ model Student {
   cashbook         cashbook[]
   DirectorLedger   DirectorLedger[]
   CommunicationLog CommunicationLog[]
+  bankTransactions bankTransaction[]
 
   @@map("students")
 }
@@ -148,10 +151,11 @@ model Fee {
 
   transferId String?
 
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  cashbooks       cashbook[]
-  directorLedgers DirectorLedger[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  cashbooks        cashbook[]
+  directorLedgers  DirectorLedger[]
+  bankTransactions bankTransaction[]
 
   @@map("fees")
 }
@@ -290,14 +294,43 @@ model CommunicationLog {
 }
 
 model BankAccount {
-  id            String   @id @default(uuid())
-  accountName   String
-  accountNumber String   @unique
-  bankName      String
-  ifscCode      String
-  branch        String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String            @id @default(uuid())
+  accountName      String
+  accountNumber    String            @unique
+  bankName         String
+  ifscCode         String
+  branch           String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  bankTransactions bankTransaction[]
 
   @@map("bank_accounts")
+}
+
+model bankTransaction {
+  id              String   @id @default(uuid())
+  transactionDate DateTime
+  transactionType String // 'DEBIT' | 'CREDIT'
+  transactionId   String?
+  amount          Int
+  description     String?
+  transactionMode String
+
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  bankAccountId String
+
+  location   Location @relation(fields: [locationId], references: [id])
+  locationId String
+
+  student   Student? @relation(fields: [studentId], references: [id])
+  studentId String?
+
+  fee   Fee?    @relation(fields: [feeId], references: [id])
+  feeId String?
+
+  director   User?   @relation(fields: [directorId], references: [id])
+  directorId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
