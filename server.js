@@ -12,6 +12,7 @@ import batchHistoryRouter from "./routes/batchHistory.js";
 import cashbookRouter from "./routes/cashbook.js";
 import directorLedgerRouter from "./routes/directorLedger.js";
 import communicationLogRouter from "./routes/communicationLog.js";
+import bankAccountRouter from "./routes/bankAccount.js";
 import { runDueReminderCron } from "./utils/dueReminderCron.js";
 
 const app = express();
@@ -49,6 +50,7 @@ app.use("/api/batch-history", batchHistoryRouter);
 app.use("/api/cashbook", cashbookRouter);
 app.use("/api/director-ledger", directorLedgerRouter);
 app.use("/api/communication", communicationLogRouter);
+app.use("/api/bank-account", bankAccountRouter);
 //cron job route
 app.get("/api/due-reminder", runDueReminderCron);
 
