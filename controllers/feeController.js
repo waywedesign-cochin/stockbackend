@@ -31,6 +31,7 @@ export const updateFee = TryCatch(async (req, res) => {
     finalFee,
     totalCourseFee,
     balanceAmount,
+    status,
   } = req.body;
   const {
     userId: loggedById,
@@ -53,6 +54,43 @@ export const updateFee = TryCatch(async (req, res) => {
 
   if (!existingFee) {
     return sendResponse(res, 404, false, "Fee not found", null);
+  }
+  // ---- Handle Refund ----
+  if (status && status !== existingFee.status && status === "REFUNDED") {
+    const payments = await prisma.payment.findMany({
+      where: { feeId: id },
+    });
+    if (payments.length > 0) {
+      await prisma.payment.updateMany({
+        where: { feeId: id },
+        data: {
+          status: "REFUNDED",
+        },
+      });
+    }
+    const fee = await prisma.fee.update({
+      where: { id },
+      data: {
+        status,
+        balanceAmount: 0,
+      },
+    });
+    //clear cache
+    await clearRedisCache("students:*");
+    await clearRedisCache("studentsRevenue:*");
+    await clearRedisCache("batches:*");
+    await clearRedisCache("batchesReport:*");
+    //create communication log
+    await addCommunicationLogEntry(
+      loggedById,
+      "FEE_REFUNDED",
+      new Date(),
+      "Fee Refunded",
+      `Fee refunded by ${userName} for ${existingFee.student.name} (${existingFee.student.currentBatch.name})`,
+      existingFee?.studentId || null,
+      userLocationId
+    );
+    return sendResponse(res, 200, true, "Fee refunded successfully.", fee);
   }
 
   // ----Fee calculations  ----

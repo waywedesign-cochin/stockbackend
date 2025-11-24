@@ -219,7 +219,7 @@ export const getBatches = TryCatch(async (req, res) => {
         where: {
           batchId: batch.id,
           // Include only active fees
-          NOT: { status: { in: ["CANCELLED", "INACTIVE"] } }, // exclude inactive fees
+          NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } }, // exclude inactive fees
         },
         select: {
           id: true,
@@ -229,7 +229,7 @@ export const getBatches = TryCatch(async (req, res) => {
             where: {
               paidAt: { not: null },
               // Include only active payments if you have a payment status
-              NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+              NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } },
             },
             select: { amount: true },
           },

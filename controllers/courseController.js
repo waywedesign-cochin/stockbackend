@@ -144,7 +144,7 @@ export const getCourseReport = TryCatch(async (req, res) => {
   // 🎯 Get all active fees and related course info (filtered by location if provided)
   const fees = await prisma.fee.findMany({
     where: {
-      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } },
       batch: {
         locationId: locationId && locationId !== "ALL" ? locationId : undefined,
       },
@@ -172,7 +172,7 @@ export const getCourseReport = TryCatch(async (req, res) => {
     where: {
       status: "PAID", // ✅ only include completed payments
       paidAt: { not: null }, // ✅ only paid transactions
-      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } },
     },
   });
 
