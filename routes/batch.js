@@ -6,7 +6,6 @@ import {
   getBatchesReport,
   updateBatch,
 } from "../controllers/batchController.js";
-import { authorizeRoles } from "../middlewares/roleMiddleware.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
 const router = express.Router();
 
