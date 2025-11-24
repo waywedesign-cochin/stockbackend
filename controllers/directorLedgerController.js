@@ -157,8 +157,16 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
 
 //GET DIRECTOR LEDGER ENTRIES---------------------------------------------
 export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
-  const { directorId, month, year, search, transactionType, page, limit } =
-    req.query;
+  const {
+    directorId,
+    month,
+    year,
+    search,
+    transactionType,
+    debitCredit,
+    page,
+    limit,
+  } = req.query;
   //redis cache
   const redisKey = `directorLedger:${JSON.stringify(req.query)}`;
   const cachedResponse = await getRedisCache(redisKey);
@@ -195,6 +203,10 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
 
   if (search)
     periodFilter.description = { contains: search, mode: "insensitive" };
+
+  if (debitCredit) {
+    periodFilter.debitCredit = debitCredit;
+  }
 
   // ---------- Totals by transactionType (Respect month/year) ----------
   const totals = await prisma.directorLedger.groupBy({
