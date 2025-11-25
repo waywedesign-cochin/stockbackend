@@ -13,6 +13,7 @@ import cashbookRouter from "./routes/cashbook.js";
 import directorLedgerRouter from "./routes/directorLedger.js";
 import communicationLogRouter from "./routes/communicationLog.js";
 import bankAccountRouter from "./routes/bankAccount.js";
+import bankTransactionRouter from "./routes/bankTransaction.js";
 import { runDueReminderCron } from "./utils/dueReminderCron.js";
 
 const app = express();
@@ -51,6 +52,7 @@ app.use("/api/cashbook", cashbookRouter);
 app.use("/api/director-ledger", directorLedgerRouter);
 app.use("/api/communication", communicationLogRouter);
 app.use("/api/bank-account", bankAccountRouter);
+app.use("/api/bank-transaction", bankTransactionRouter);
 //cron job route
 app.get("/api/due-reminder", runDueReminderCron);
 

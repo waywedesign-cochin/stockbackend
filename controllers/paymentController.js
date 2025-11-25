@@ -8,8 +8,16 @@ import { sendFeeCompletionEmail } from "../utils/sendFeeCompletionMail.js";
 
 //create-payment
 export const createPayment = TryCatch(async (req, res) => {
-  const { feeId, amount, mode, transactionId, note, paidAt, isAdvance } =
-    req.body;
+  const {
+    feeId,
+    amount,
+    mode,
+    transactionId,
+    note,
+    paidAt,
+    isAdvance,
+    bankAccountId,
+  } = req.body;
 
   const {
     userId: loggedById,
@@ -82,8 +90,48 @@ export const createPayment = TryCatch(async (req, res) => {
     },
   });
 
-  //create communication log
+  // create bank transaction
   if (payment) {
+    if (payment.mode === "RAZORPAY" || payment.mode === "BANK_TRANSFER") {
+      const bankTransaction = await prisma.bankTransaction.create({
+        data: {
+          amount,
+          transactionId,
+          transactionDate: paidAt,
+          transactionMode: payment.mode,
+          transactionType: "CREDIT",
+          category: "STUDENT_PAYMENT",
+          description: note,
+          fee: {
+            connect: { id: updatedFee.id },
+          },
+          location: {
+            connect: { id: userLocationId },
+          },
+          student: {
+            connect: { id: updatedFee.studentId },
+          },
+          bankAccount: {
+            connect: { id: bankAccountId },
+          },
+          status: "PAID",
+        },
+      });
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          bankTransactionId: bankTransaction.id,
+        },
+      });
+      await prisma.bankAccount.update({
+        where: { id: bankAccountId },
+        data: {
+          balance: {
+            increment: amount,
+          },
+        },
+      });
+    }
     //send slot booking email
     if (isAdvance) {
       try {
@@ -152,6 +200,18 @@ export const getPayment = TryCatch(async (req, res) => {
           },
         },
       },
+      bankTransaction: {
+        select: {
+          id: true,
+          bankAccountId: true,
+          bankAccount: {
+            select: {
+              id: true,
+              bankName: true,
+            },
+          },
+        },
+      },
     },
     orderBy: {
       dueDate: "asc",
@@ -163,8 +223,16 @@ export const getPayment = TryCatch(async (req, res) => {
 //update payment
 export const editPayment = TryCatch(async (req, res) => {
   const { paymentId } = req.params;
-  const { amount, mode, transactionId, note, dueDate, paidAt, isAdvance } =
-    req.body;
+  const {
+    amount,
+    mode,
+    transactionId,
+    note,
+    dueDate,
+    paidAt,
+    isAdvance,
+    bankAccountId,
+  } = req.body;
   const {
     userId: loggedById,
     locationId: userLocationId,
@@ -242,8 +310,54 @@ export const editPayment = TryCatch(async (req, res) => {
             referenceId: transactionId,
           },
         });
+
         //clear director ledger cache
         await clearRedisCache("directorLedger:*");
+      }
+
+      //create bank transaction if payment mode is RAZORPAY or BANK_TRANSFER
+      if (
+        updatedPayment.mode === "RAZORPAY" ||
+        updatedPayment.mode === "BANK_TRANSFER"
+      ) {
+        const bankTransaction = await tx.bankTransaction.create({
+          data: {
+            amount,
+            transactionId,
+            transactionDate: paidAt,
+            transactionMode: updatedPayment.mode,
+            transactionType: "CREDIT",
+            category: "STUDENT_PAYMENT",
+            description: note,
+            fee: {
+              connect: { id: updatedFee.id },
+            },
+            location: {
+              connect: { id: userLocationId },
+            },
+            student: {
+              connect: { id: updatedFee.studentId },
+            },
+            bankAccount: {
+              connect: { id: bankAccountId },
+            },
+            status: "PAID",
+          },
+        });
+        await tx.payment.update({
+          where: { id: updatedPayment.id },
+          data: {
+            bankTransactionId: bankTransaction.id,
+          },
+        });
+        await tx.bankAccount.update({
+          where: { id: bankAccountId },
+          data: {
+            balance: {
+              increment: amount,
+            },
+          },
+        });
       }
 
       return { updatedPayment, updatedFee };
