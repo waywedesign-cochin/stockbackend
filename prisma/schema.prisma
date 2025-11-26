@@ -265,6 +265,9 @@ model DirectorLedger {
   fee       Fee?      @relation(fields: [feeId], references: [id])
   feeId     String?
 
+  bankTransaction   bankTransaction? @relation(fields: [bankTransactionId], references: [id])
+  bankTransactionId String?
+
   @@map("director_ledgers")
 }
 
@@ -302,7 +305,7 @@ model BankAccount {
   bankName         String
   ifscCode         String
   branch           String?
-  balance          Int             @default(0)
+  balance          Int               @default(0)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   bankTransactions bankTransaction[]
@@ -311,7 +314,7 @@ model BankAccount {
 }
 
 model bankTransaction {
-  id              String      @id @default(uuid())
+  id              String   @id @default(uuid())
   transactionDate DateTime
   transactionType String // 'DEBIT' | 'CREDIT'
   transactionId   String?
@@ -321,8 +324,8 @@ model bankTransaction {
   status          String // 'PENDING' | 'COMPLETED' | 'FAILED'
   category        String // 'STUDENT_PAYMENT' | 'FEE_REFUND' | 'OTHER'
 
-  bankAccount     BankAccount @relation(fields: [bankAccountId], references: [id])
-  bankAccountId   String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+  bankAccountId String
 
   location   Location @relation(fields: [locationId], references: [id])
   locationId String
@@ -336,7 +339,8 @@ model bankTransaction {
   director   User?   @relation(fields: [directorId], references: [id])
   directorId String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  payment   Payment?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  payment         Payment?
+  directorLedgers DirectorLedger[]
 }

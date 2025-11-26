@@ -94,16 +94,29 @@ export const getBankTransactions = TryCatch(async (req, res) => {
       { description: { contains: search, mode: "insensitive" } },
     ];
   }
-
+  const filtersForTotal = { locationId };
+  if (year) {
+    if (month && month !== "ALL") {
+      filtersForTotal.transactionDate = {
+        gte: new Date(year, parseInt(month, 10) - 1, 1),
+        lte: new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999),
+      };
+    } else {
+      filtersForTotal.transactionDate = {
+        gte: new Date(year, 0, 1),
+        lte: new Date(year, 11, 31, 23, 59, 59, 999),
+      };
+    }
+  }
   // calculate total debit and credit
   const totalCredit = await prisma.bankTransaction.aggregate({
-    where: { ...periodFilter, transactionType: "CREDIT" },
+    where: { ...filtersForTotal, transactionType: "CREDIT" },
     _sum: {
       amount: true,
     },
   });
   const totalDebit = await prisma.bankTransaction.aggregate({
-    where: { ...periodFilter, transactionType: "DEBIT" },
+    where: { ...filtersForTotal, transactionType: "DEBIT" },
     _sum: {
       amount: true,
     },
