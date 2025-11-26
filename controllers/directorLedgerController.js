@@ -16,6 +16,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     amount,
     transactionType,
     description,
+    bankAccountId,
     referenceId,
     studentId,
     directorId,
@@ -26,9 +27,21 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     name: userName,
   } = req.user;
 
+  if (transactionType === "INSTITUTION_GAVE_BANK" && bankAccountId) {
+    const bankAccount = await prisma.bankAccount.findUnique({
+      where: { id: bankAccountId },
+    });
+    if (bankAccount.balance < amount)
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Insufficient balance in bank account"
+      );
+  }
+
   // to track if fee completed
   let updatedFeeId = null;
-
   const result = await prisma.$transaction(async (tx) => {
     // Create director ledger entry
     const newEntry = await tx.directorLedger.create({
@@ -110,6 +123,44 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         updatedFeeId = updatedFee.id;
       }
     }
+
+    //create bank transaction for payment to director
+    const bankTransaction = await tx.bankTransaction.create({
+      data: {
+        amount,
+        transactionId: referenceId || null,
+        transactionDate: transactionDate,
+        transactionMode: "INTERNAL_TRANSFER",
+        transactionType: "DEBIT",
+        category: "PAYMENT_TO_DIRECTOR",
+        description: description || "Payment to director",
+        location: {
+          connect: { id: userLocationId },
+        },
+        director: {
+          connect: { id: directorId },
+        },
+        bankAccount: {
+          connect: { id: bankAccountId },
+        },
+        status: "PAID",
+      },
+    });
+    await tx.directorLedger.update({
+      where: { id: newEntry.id },
+      data: {
+        bankTransactionId: bankTransaction.id,
+      },
+    });
+
+    await tx.bankAccount.update({
+      where: { id: bankAccountId },
+      data: {
+        balance: {
+          decrement: amount,
+        },
+      },
+    });
 
     return newEntry;
   });
@@ -246,6 +297,16 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
         },
       },
       director: { select: { id: true, username: true, email: true } },
+      bankTransaction: {
+        include: {
+          bankAccount: {
+            select: {
+              id: true,
+              bankName: true,
+            },
+          },
+        },
+      },
     },
     skip,
     take: pageSize,
@@ -305,6 +366,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     transactionType,
     description,
     referenceId,
+    bankAccountId,
     studentId, // optional — if linked to a student
   } = req.body;
   const {
@@ -494,6 +556,84 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       },
     });
 
+    // ================= BANK TRANSACTION LOGIC =================
+    const wasBankType = existing.transactionType === "INSTITUTION_GAVE_BANK";
+    const isBankType = transactionType === "INSTITUTION_GAVE_BANK";
+
+    // 1. Switched TO bank payment (create new)
+    if (isBankType && !wasBankType) {
+      const bankTransaction = await tx.bankTransaction.create({
+        data: {
+          amount,
+          transactionId: referenceId || null,
+          transactionDate,
+          transactionMode: "BANK_TRANSFER",
+          transactionType: "DEBIT",
+          category: "PAYMENT_TO_DIRECTOR",
+          description: description || "Payment to director",
+          location: { connect: { id: userLocationId } },
+          director: { connect: { id: directorId } },
+          bankAccount: { connect: { id: bankAccountId } },
+          status: "PAID",
+        },
+      });
+
+      await tx.directorLedger.update({
+        where: { id: result.id },
+        data: { bankTransactionId: bankTransaction.id },
+      });
+
+      // Deduct money from bank
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { balance: { decrement: amount } },
+      });
+    }
+
+    // 2. Bank -> Bank (update amount)
+    if (isBankType && wasBankType && existing.bankTransactionId) {
+      const oldAmount = existing.amount;
+      const newAmount = amount;
+      const difference = newAmount - oldAmount;
+
+      await tx.bankTransaction.update({
+        where: { id: existing.bankTransactionId },
+        data: {
+          amount,
+          transactionId: referenceId || null,
+          transactionDate,
+          description,
+          transactionMode: "BANK_TRANSFER",
+          transactionType: "DEBIT",
+          category: "PAYMENT_TO_DIRECTOR",
+        },
+      });
+
+      if (difference !== 0) {
+        await tx.bankAccount.update({
+          where: { id: bankAccountId },
+          data: {
+            balance:
+              difference > 0
+                ? { decrement: difference }
+                : { increment: Math.abs(difference) },
+          },
+        });
+      }
+    }
+
+    // 3. Switched FROM bank to non-bank (reverse payment)
+    if (!isBankType && wasBankType && existing.bankTransactionId) {
+      await tx.bankTransaction.delete({
+        where: { id: existing.bankTransactionId },
+      });
+
+      // Restore money to bank
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: { balance: { increment: existing.amount } },
+      });
+    }
     // If linked to student, update fee and payment
     if (studentId) {
       //fetch fee linked to director ledger
@@ -659,6 +799,30 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       "Director ledger entry deleted successfully, fee and payment reversed",
       null
     );
+  }
+  if (
+    entry.transactionType === "INSTITUTION_GAVE_BANK" &&
+    entry.bankTransactionId
+  ) {
+    //reverse bank transaction
+    const bankTransaction = await prisma.bankTransaction.findUnique({
+      where: { id: entry.bankTransactionId },
+    });
+    if (bankTransaction) {
+      //restore bank balance
+      await prisma.bankAccount.update({
+        where: { id: bankTransaction.bankAccountId },
+        data: {
+          balance: {
+            increment: bankTransaction.amount,
+          },
+        },
+      });
+      //delete bank transaction
+      await prisma.bankTransaction.delete({
+        where: { id: entry.bankTransactionId },
+      });
+    }
   }
 
   await prisma.directorLedger.delete({ where: { id } });
