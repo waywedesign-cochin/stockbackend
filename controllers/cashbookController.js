@@ -461,7 +461,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           transactionDate,
           amount,
           transactionType,
-          debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+          debitCredit:
+            transactionType === "STUDENT_PAID" ||
+            transactionType === "OTHER_INCOME"
+              ? "CREDIT"
+              : "DEBIT",
           description,
           referenceId,
           studentId,
@@ -608,7 +612,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
         transactionDate,
         amount,
         transactionType,
-        debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+        debitCredit:
+          transactionType === "STUDENT_PAID" ||
+          transactionType === "OTHER_INCOME"
+            ? "CREDIT"
+            : "DEBIT",
         description,
         referenceId,
       },
