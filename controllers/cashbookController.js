@@ -37,7 +37,11 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
         transactionDate,
         amount,
         transactionType,
-        debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+        debitCredit:
+          transactionType === "STUDENT_PAID" ||
+          transactionType === "OTHER_INCOME"
+            ? "CREDIT"
+            : "DEBIT",
         description,
         locationId,
         referenceId,
@@ -325,6 +329,13 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
       ownerTaken:
         totals.find((t) => t.transactionType === "OWNER_TAKEN")?._sum.amount ||
         0,
+      otherExpenses:
+        totals.find((t) => t.transactionType === "OTHER_EXPENSE")?._sum
+          .amount || 0,
+      otherIncome:
+        totals.find((t) => t.transactionType === "OTHER_INCOME")?._sum.amount ||
+        0,
+      periodBalance,
       openingBalance,
       closingBalance,
       cashInHand: closingBalance,
@@ -352,7 +363,6 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
 });
 
 //UPDATE CASHBOOK ENTRY---------------------------------------------
-
 export const updateCashbookEntry = TryCatch(async (req, res) => {
   const { id } = req.params;
   const {
@@ -451,7 +461,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           transactionDate,
           amount,
           transactionType,
-          debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+          debitCredit:
+            transactionType === "STUDENT_PAID" ||
+            transactionType === "OTHER_INCOME"
+              ? "CREDIT"
+              : "DEBIT",
           description,
           referenceId,
           studentId,
@@ -473,7 +487,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
           cashbookId: entry.id,
         },
       });
-      
+
       //to track if fee completed
       if (updatedFee.status === "PAID") {
         updatedFeeId = updatedFee.id;
@@ -598,7 +612,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
         transactionDate,
         amount,
         transactionType,
-        debitCredit: transactionType === "STUDENT_PAID" ? "CREDIT" : "DEBIT",
+        debitCredit:
+          transactionType === "STUDENT_PAID" ||
+          transactionType === "OTHER_INCOME"
+            ? "CREDIT"
+            : "DEBIT",
         description,
         referenceId,
       },
