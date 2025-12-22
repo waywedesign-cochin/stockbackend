@@ -113,7 +113,7 @@ export const createPayment = TryCatch(async (req, res) => {
         bankAccount: {
           connect: { id: bankAccountId },
         },
-        status: "PAID",
+        status: "COMPLETED",
       },
     });
     await prisma.payment.update({
@@ -336,7 +336,7 @@ export const editPayment = TryCatch(async (req, res) => {
           bankAccount: {
             connect: { id: bankAccountId },
           },
-          status: "PAID",
+          status: "COMPLETED",
         },
       });
       await tx.payment.update({

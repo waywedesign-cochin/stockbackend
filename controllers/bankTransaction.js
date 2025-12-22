@@ -6,7 +6,6 @@ import prisma from "../config/prismaClient.js";
 export const addBankTransaction = TryCatch(async (req, res) => {
   const {
     transactionDate,
-    transactionType,
     transactionId,
     amount,
     description,
@@ -14,8 +13,7 @@ export const addBankTransaction = TryCatch(async (req, res) => {
     bankAccountId,
     category,
     locationId,
-    studentId,
-    directorId,
+    status,
   } = req.body;
   const bankTransaction = await prisma.bankTransaction.create({
     data: {
@@ -30,10 +28,8 @@ export const addBankTransaction = TryCatch(async (req, res) => {
       transactionMode,
       bankAccountId,
       locationId,
-      studentId,
-      directorId,
       category,
-      status: "PAID",
+      status,
     },
   });
   if (bankTransaction) {
@@ -106,6 +102,11 @@ export const getBankTransactions = TryCatch(async (req, res) => {
     periodFilter.OR = [
       { transactionId: { contains: search, mode: "insensitive" } },
       { description: { contains: search, mode: "insensitive" } },
+      { transactionMode: { contains: search, mode: "insensitive" } },
+      { category: { contains: search, mode: "insensitive" } },
+      { status: { contains: search, mode: "insensitive" } },
+      { transactionType: { contains: search, mode: "insensitive" } },
+      { amount: isNaN(Number(search)) ? undefined : Number(search) },
     ];
   }
   const filtersForTotal = { locationId };
@@ -134,6 +135,18 @@ export const getBankTransactions = TryCatch(async (req, res) => {
     _sum: {
       amount: true,
     },
+  });
+  const razorpayTotal = await prisma.bankTransaction.aggregate({
+    where: { ...filtersForTotal, transactionMode: "RAZORPAY" },
+    _sum: {
+      amount: true,
+    },
+  });
+
+  const totals = await prisma.bankTransaction.groupBy({
+    by: ["category"],
+    where: { ...periodFilter },
+    _sum: { amount: true },
   });
 
   //balance
@@ -164,6 +177,11 @@ export const getBankTransactions = TryCatch(async (req, res) => {
       balance,
       totalCredit: totalCredit._sum.amount,
       totalDebit: totalDebit._sum.amount,
+      razorpayTotal: razorpayTotal._sum.amount,
+      breakdown: totals.reduce((acc, curr) => {
+        acc[curr.category] = curr._sum.amount;
+        return acc;
+      }, {}),
     },
   };
 
@@ -179,60 +197,103 @@ export const getBankTransactions = TryCatch(async (req, res) => {
 //update bank transaction
 export const updateBankTransaction = TryCatch(async (req, res) => {
   const { id } = req.params;
+
   const {
     transactionDate,
-    transactionType,
     transactionId,
     amount,
     description,
     transactionMode,
-    category,
     bankAccountId,
+    category,
     locationId,
-    studentId,
-    directorId,
+    status,
   } = req.body;
 
-  const existingBankTransaction = await prisma.bankTransaction.findUnique({
-    where: { id },
+  const updatedBankTransaction = await prisma.$transaction(async (tx) => {
+    const oldTx = await tx.bankTransaction.findUnique({ where: { id } });
+    if (!oldTx) throw new Error("Transaction not found");
+
+    const newType =
+      category === "OTHER_INCOME" || category === "STUDENT_PAID"
+        ? "CREDIT"
+        : "DEBIT";
+
+    // undo old
+    await tx.bankAccount.update({
+      where: { id: oldTx.bankAccountId },
+      data: {
+        balance: {
+          increment:
+            oldTx.transactionType === "CREDIT" ? -oldTx.amount : oldTx.amount,
+        },
+      },
+    });
+
+    // apply new
+    await tx.bankAccount.update({
+      where: { id: bankAccountId },
+      data: {
+        balance: {
+          increment: newType === "CREDIT" ? amount : -amount,
+        },
+      },
+    });
+
+    // update transaction
+    return await tx.bankTransaction.update({
+      where: { id },
+      data: {
+        transactionDate,
+        transactionType: newType,
+        transactionId,
+        amount,
+        description,
+        transactionMode,
+        bankAccountId,
+        locationId,
+        category,
+        status,
+      },
+    });
   });
 
-  if (!existingBankTransaction) {
-    return sendResponse(res, 404, false, "Bank transaction not found", null);
-  }
-
-  const updatedBankTransaction = await prisma.bankTransaction.update({
-    where: { id },
-    data: {
-      transactionDate,
-      transactionType,
-      transactionId,
-      amount,
-      description,
-      transactionMode,
-      category,
-      bankAccountId,
-      locationId,
-      studentId,
-      directorId,
-    },
-  });
-
-  sendResponse(
-    res,
-    200,
-    true,
-    "Bank transaction updated successfully",
-    updatedBankTransaction
-  );
+  sendResponse(res, 200, true, "Updated", updatedBankTransaction);
 });
 
 //delete bank transaction
 export const deleteBankTransaction = TryCatch(async (req, res) => {
   const { id } = req.params;
+  const bankTransaction = await prisma.bankTransaction.findUnique({
+    where: { id },
+  });
+
+  if (bankTransaction) {
+    // revert balance
+    if (bankTransaction.transactionType === "CREDIT") {
+      await prisma.bankAccount.update({
+        where: { id: bankTransaction.bankAccountId },
+        data: {
+          balance: {
+            decrement: bankTransaction.amount,
+          },
+        },
+      });
+    } else {
+      await prisma.bankAccount.update({
+        where: { id: bankTransaction.bankAccountId },
+        data: {
+          balance: {
+            increment: bankTransaction.amount,
+          },
+        },
+      });
+    }
+  }
   const deletedBankTransaction = await prisma.bankTransaction.delete({
     where: { id },
   });
+
   sendResponse(
     res,
     200,

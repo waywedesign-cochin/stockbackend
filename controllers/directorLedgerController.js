@@ -143,7 +143,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         bankAccount: {
           connect: { id: bankAccountId },
         },
-        status: "PAID",
+        status: "COMPLETED",
       },
     });
     await tx.directorLedger.update({
@@ -574,7 +574,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           location: { connect: { id: userLocationId } },
           director: { connect: { id: directorId } },
           bankAccount: { connect: { id: bankAccountId } },
-          status: "PAID",
+          status: "COMPLETED",
         },
       });
 
