@@ -20,7 +20,10 @@ export const addBankTransaction = TryCatch(async (req, res) => {
   const bankTransaction = await prisma.bankTransaction.create({
     data: {
       transactionDate,
-      transactionType,
+      transactionType:
+        category === "OTHER_INCOME" || category === "STUDENT_PAID"
+          ? "CREDIT"
+          : "DEBIT",
       transactionId,
       amount,
       description,
@@ -34,14 +37,25 @@ export const addBankTransaction = TryCatch(async (req, res) => {
     },
   });
   if (bankTransaction) {
-    await prisma.bankAccount.update({
-      where: { id: bankAccountId },
-      data: {
-        balance: {
-          increment: amount,
+    if (bankTransaction.transactionType === "CREDIT") {
+      await prisma.bankAccount.update({
+        where: { id: bankAccountId },
+        data: {
+          balance: {
+            increment: amount,
+          },
         },
-      },
-    });
+      });
+    } else {
+      await prisma.bankAccount.update({
+        where: { id: bankAccountId },
+        data: {
+          balance: {
+            decrement: amount,
+          },
+        },
+      });
+    }
   }
   sendResponse(
     res,
