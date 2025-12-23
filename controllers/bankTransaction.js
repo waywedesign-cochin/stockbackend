@@ -149,6 +149,19 @@ export const getBankTransactions = TryCatch(async (req, res) => {
     _sum: { amount: true },
   });
 
+  let otherIncome = 0;
+  let otherExpense = 0;
+
+  totals.forEach((item) => {
+    if (item.category === "OTHER_INCOME") {
+      otherIncome = item._sum.amount ?? 0;
+    }
+
+    if (item.category === "OTHER_EXPENSE") {
+      otherExpense = item._sum.amount ?? 0;
+    }
+  });
+
   //balance
   const balance =
     (totalCredit._sum.amount || 0) - (totalDebit._sum.amount || 0);
@@ -178,10 +191,8 @@ export const getBankTransactions = TryCatch(async (req, res) => {
       totalCredit: totalCredit._sum.amount,
       totalDebit: totalDebit._sum.amount,
       razorpayTotal: razorpayTotal._sum.amount,
-      breakdown: totals.reduce((acc, curr) => {
-        acc[curr.category] = curr._sum.amount;
-        return acc;
-      }, {}),
+      otherIncome,
+      otherExpense,
     },
   };
 
