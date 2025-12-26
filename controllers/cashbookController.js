@@ -296,11 +296,15 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
   });
 
   periodEntries.forEach((e) => {
-    if (e.transactionType === "STUDENT_PAID" && e.debitCredit === "CREDIT") {
+    if (
+      (e.transactionType === "STUDENT_PAID" && e.debitCredit === "CREDIT") ||
+      (e.transactionType === "OTHER_INCOME" && e.debitCredit === "CREDIT")
+    ) {
       periodBalance += e.amount;
     } else if (
       (e.transactionType === "OWNER_TAKEN" ||
-        e.transactionType === "OFFICE_EXPENSE") &&
+        e.transactionType === "OFFICE_EXPENSE" ||
+        e.transactionType === "OTHER_EXPENSE") &&
       e.debitCredit === "DEBIT"
     ) {
       periodBalance -= e.amount;
