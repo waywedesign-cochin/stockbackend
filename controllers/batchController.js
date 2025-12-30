@@ -67,106 +67,141 @@ export const addBatch = TryCatch(async (req, res) => {
     //clear redis cache for batches
     await clearRedisCache("batches:*");
     await clearRedisCache("batchesReport:*");
+    await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
 
 //GET BATCHES--------------------------------------------------------
 export const getBatches = TryCatch(async (req, res) => {
-  const { id, location, course, status, mode, search, year } = req.query;
+  const { location, course, status, mode, search, year } = req.query;
 
-  // Redis cache
-  const redisKey = `batches:${JSON.stringify(req.query)}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Batches fetched successfully",
-      cachedResponse
-    );
-  }
-
-  const page = parseInt(req.query.page) || 1;
-
-  let limit = req.query.limit !== undefined ? parseInt(req.query.limit) : 10;
-  const skip = limit === 0 ? undefined : (page - 1) * limit;
-  const take = limit === 0 ? undefined : limit;
+  const page = Number(req.query.page || 1);
+  const limit = Number(req.query.limit || 10);
+  const skip = (page - 1) * limit;
 
   if (!location) {
     return sendResponse(res, 400, false, "Location is required", null);
   }
 
-  // ===============================
-  // 🧠 Base Filters
-  // ===============================
-  const where = {
-    OR: [
-      { location: { name: { contains: location, mode: "insensitive" } } },
-      { locationId: location },
-    ],
-  };
-
-  if (course || mode) {
-    where.course = {};
-    if (course) where.course.id = { contains: course, mode: "insensitive" };
-    if (mode) where.course.mode = { equals: mode };
-  }
+  // Filters
+  const where = { locationId: location };
 
   if (status) where.status = status;
   if (year) where.year = Number(year);
 
+  if (course || mode) {
+    where.course = {};
+    if (course) where.course.id = course;
+    if (mode) where.course.mode = mode;
+  }
+
   if (search) {
-    where.AND = [
-      {
-        OR: [
-          { name: { contains: search, mode: "insensitive" } },
-          { tutor: { contains: search, mode: "insensitive" } },
-          { coordinator: { contains: search, mode: "insensitive" } },
-          { course: { name: { contains: search, mode: "insensitive" } } },
-          { location: { name: { contains: search, mode: "insensitive" } } },
-        ],
-      },
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { tutor: { contains: search, mode: "insensitive" } },
+      { coordinator: { contains: search, mode: "insensitive" } },
+      { course: { name: { contains: search, mode: "insensitive" } } },
     ];
   }
 
-  const totalCount = await prisma.batch.count({ where });
+  // Fetch batches + count for pagination
+  const [batches, totalCount] = await Promise.all([
+    prisma.batch.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: "desc" },
+      include: {
+        course: {
+          select: { id: true, name: true, baseFee: true, mode: true },
+        },
+        location: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.batch.count({ where }),
+  ]);
 
-  // ===============================
-  // 📦 Fetch batches (Paginated)
-  // ===============================
-  const batches = await prisma.batch.findMany({
-    where,
-    include: {
-      location: true,
-      course: {
-        select: {
-          id: true,
-          name: true,
-          baseFee: true,
-          duration: true,
-          mode: true,
-        },
-      },
-      students: {
-        include: {
-          fees: true,
-          payments: true, // <-- we’ll use payments.feeId
-        },
-      },
-      _count: { select: { students: true } },
+  // Fetch fees for each batch
+  const batchIds = batches.map((b) => b.id);
+  const fees = await prisma.fee.findMany({
+    where: {
+      batchId: { in: batchIds },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE", "REFUNDED"] } },
     },
-    skip,
-    take,
-    orderBy: { createdAt: "desc" },
+    select: {
+      batchId: true,
+      finalFee: true,
+      payments: {
+        where: { paidAt: { not: null } },
+        select: { amount: true },
+      },
+    },
   });
 
-  // ===============================
-  // 💰 Dashboard Stats
-  // ===============================
-  const allBatchesForLocation = await prisma.batch.findMany({
+  // Group fees by batch
+  const feeMap = {};
+
+  for (const fee of fees) {
+    if (!feeMap[fee.batchId]) {
+      feeMap[fee.batchId] = { totalFee: 0, collected: 0 };
+    }
+
+    feeMap[fee.batchId].totalFee += fee.finalFee || 0;
+    feeMap[fee.batchId].collected += fee.payments.reduce(
+      (sum, p) => sum + (p.amount || 0),
+      0
+    );
+  }
+
+  // Final batch response
+  const enhancedBatches = batches.map((batch) => {
+    const fee = feeMap[batch.id] || { totalFee: 0, collected: 0 };
+
+    return {
+      ...batch,
+      totalFee: fee.totalFee,
+      collected: fee.collected,
+      pending: Math.max(fee.totalFee - fee.collected, 0),
+      enrollment: `${batch.currentCount}/${batch.slotLimit}`,
+      enrollmentPercent: (
+        (batch.currentCount / (batch.slotLimit || 1)) *
+        100
+      ).toFixed(0),
+    };
+  });
+
+  return sendResponse(res, 200, true, "Batches fetched successfully", {
+    batches: enhancedBatches,
+    pagination: {
+      currentPage: page,
+      limit,
+      totalPages: Math.ceil(totalCount / limit),
+      totalCount,
+    },
+  });
+});
+
+//Batch Stats
+export const getBatchStats = TryCatch(async (req, res) => {
+  const { location, year } = req.query;
+
+  if (!location) {
+    return sendResponse(res, 400, false, "Location is required", null);
+  }
+
+  const redisKey = `batchStats:${location}:${year || "all"}`;
+  const cached = await getRedisCache(redisKey);
+
+  if (cached) {
+    console.log("📦 Batch stats from Redis");
+    return sendResponse(res, 200, true, "Batch stats fetched", cached);
+  }
+
+  const where = { locationId: location };
+  if (year) where.year = Number(year);
+
+  const batches = await prisma.batch.findMany({
     where,
     include: {
       students: {
@@ -180,27 +215,29 @@ export const getBatches = TryCatch(async (req, res) => {
 
   let totalRevenue = 0;
   let outstandingFees = 0;
-  let activeBatches = 0;
   let totalEnrollment = 0;
   let availableSlots = 0;
+  let activeBatches = 0;
   let totalFees = 0;
-  allBatchesForLocation.forEach((batch) => {
-    const allFees = batch.students.flatMap((s) => s.fees);
-    const allPayments = batch.students.flatMap((s) => s.payments);
-    const totalFeeForBatch = allFees.reduce(
-      (sum, f) => sum + (f.finalFee || 0),
-      0
-    );
-    const collected = allPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-    totalFees += totalFeeForBatch;
-    outstandingFees += totalFeeForBatch - collected;
-    totalRevenue += collected;
-    totalEnrollment += batch.students.length;
-    if (batch.status === "ACTIVE") activeBatches++;
-    availableSlots += batch.slotLimit - batch.currentCount;
-  });
 
-  const dashboardStats = {
+  for (const batch of batches) {
+    if (batch.status === "ACTIVE") activeBatches++;
+
+    totalEnrollment += batch.students.length;
+    availableSlots += batch.slotLimit - batch.currentCount;
+
+    const fees = batch.students.flatMap((s) => s.fees);
+    const payments = batch.students.flatMap((s) => s.payments);
+
+    const batchFee = fees.reduce((s, f) => s + (f.finalFee || 0), 0);
+    const collected = payments.reduce((s, p) => s + (p.amount || 0), 0);
+
+    totalFees += batchFee;
+    totalRevenue += collected;
+    outstandingFees += batchFee - collected;
+  }
+
+  const stats = {
     activeBatches,
     totalEnrollment,
     availableSlots,
@@ -209,97 +246,9 @@ export const getBatches = TryCatch(async (req, res) => {
     totalFees,
   };
 
-  // ===============================
-  // 🎯 Enhance paginated batches
-  // ===============================
-  const enhancedBatches = await Promise.all(
-    batches.map(async (batch) => {
-      // 1️⃣ Get all *active* fees directly linked to this batch
-      const fees = await prisma.fee.findMany({
-        where: {
-          batchId: batch.id,
-          // Include only active fees
-          NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } }, // exclude inactive fees
-        },
-        select: {
-          id: true,
-          finalFee: true,
-          status: true,
-          payments: {
-            where: {
-              paidAt: { not: null },
-              // Include only active payments if you have a payment status
-              NOT: { status: { in: ["CANCELLED", "INACTIVE","REFUNDED"] } },
-            },
-            select: { amount: true },
-          },
-        },
-      });
+  await setRedisCache(redisKey, stats, 300); // 5 minutes TTL
 
-      // 2️⃣ Calculate total fee and collected
-      let totalFee = 0;
-      let collected = 0;
-
-      for (const fee of fees) {
-        totalFee += fee.finalFee || 0;
-        const totalPayments = fee.payments.reduce(
-          (sum, p) => sum + (p.amount || 0),
-          0
-        );
-        collected += totalPayments;
-      }
-
-      // 3️⃣ Calculate pending
-      const pending = Math.max(totalFee - collected, 0);
-
-      // 4️⃣ Return final summarized object
-      return {
-        id: batch.id,
-        name: batch.name,
-        year: batch.year,
-        startDate: batch.startDate,
-        slotLimit: batch.slotLimit,
-        currentCount: batch.currentCount,
-        course: batch.course,
-        location: batch.location,
-        tutor: batch.tutor,
-        coordinator: batch.coordinator,
-        status: batch.status,
-        enrollment: `${batch.currentCount}/${batch.slotLimit}`,
-        enrollmentPercent: (
-          (batch.currentCount / (batch.slotLimit || 1)) *
-          100
-        ).toFixed(0),
-        totalFee,
-        collected,
-        pending,
-      };
-    })
-  );
-
-  // ===============================
-  // 🚀 Final Response
-  // ===============================
-  const responseData = {
-    dashboardStats,
-    batches: enhancedBatches,
-    pagination: {
-      currentPage: page,
-      limit,
-      totalPages: Math.ceil(totalCount / limit),
-      totalCount,
-    },
-  };
-
-  await setRedisCache(redisKey, responseData);
-
-  return sendResponse(
-    res,
-    200,
-    true,
-    "Batches fetched successfully",
-    responseData
-  );
+  return sendResponse(res, 200, true, "Batch stats fetched", stats);
 });
 
 //update batch
@@ -358,6 +307,8 @@ export const updateBatch = TryCatch(async (req, res) => {
     );
     //redis cache clear
     await clearRedisCache("batches:*");
+    await clearRedisCache("batchesReport:*");
+    await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch updated successfully", batch);
 });
@@ -392,6 +343,7 @@ export const deleteBatch = TryCatch(async (req, res) => {
     //redis cache clear
     await clearRedisCache("batches:*");
     await clearRedisCache("batchesReport:*");
+    await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });
