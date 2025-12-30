@@ -185,7 +185,10 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     req.query;
 
   //redis cache
-  const redisKey = `cashbook:${JSON.stringify(req.query)}`;
+  const redisKey = `cashbook:${locationId}:${year || "all"}:${month || "all"}:${
+    transactionType || "all"
+  }:page:${page || 1}:limit:${limit || 10}`;
+
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
     console.log("📦 Serving from Redis Cache (Cashbook)");
@@ -248,66 +251,44 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
   const totalCredit =
     debitCreditTotals.find((t) => t.debitCredit === "CREDIT")?._sum.amount || 0;
 
-  // ---------- Calculate Opening Balance ----------
-  let openingBalance = 0;
+  // ---------- Calculate Opening & Period Balance ----------
+  const periodEndDate =
+    month && month !== "allmonths"
+      ? new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999)
+      : new Date(year, 11, 31, 23, 59, 59, 999);
 
-  const openingEntryExists = await prisma.cashbook.findFirst({
+  const allEntriesUpToPeriod = await prisma.cashbook.findMany({
     where: {
       locationId,
-      transactionDate:
-        month && month !== "allmonths"
-          ? { lt: new Date(year, parseInt(month, 10) - 1, 1) }
-          : { lt: new Date(year, 0, 1) },
+      transactionDate: { lte: periodEndDate },
     },
   });
 
-  if (openingEntryExists) {
-    const openingEntries = await prisma.cashbook.findMany({
-      where: {
-        locationId,
-        transactionDate:
-          month && month !== "allmonths"
-            ? { lt: new Date(year, parseInt(month, 10) - 1, 1) }
-            : { lt: new Date(year, 0, 1) },
-      },
-    });
-
-    openingEntries.forEach((e) => {
-      if (
-        (e.transactionType === "STUDENT_PAID" && e.debitCredit === "CREDIT") ||
-        (e.transactionType === "OTHER_INCOME" && e.debitCredit === "CREDIT")
-      ) {
-        openingBalance += e.amount;
-      } else if (
-        (e.transactionType === "OWNER_TAKEN" ||
-          e.transactionType === "OFFICE_EXPENSE" ||
-          e.transactionType === "OTHER_EXPENSE") &&
-        e.debitCredit === "DEBIT"
-      ) {
-        openingBalance -= e.amount;
-      }
-    });
-  }
-
-  // ---------- Period Balance ----------
+  let openingBalance = 0;
   let periodBalance = 0;
-  const periodEntries = await prisma.cashbook.findMany({
-    where: { ...periodFilter },
-  });
 
-  periodEntries.forEach((e) => {
-    if (
-      (e.transactionType === "STUDENT_PAID" && e.debitCredit === "CREDIT") ||
-      (e.transactionType === "OTHER_INCOME" && e.debitCredit === "CREDIT")
-    ) {
-      periodBalance += e.amount;
-    } else if (
+  allEntriesUpToPeriod.forEach((e) => {
+    const isCredit =
+      (e.transactionType === "STUDENT_PAID" ||
+        e.transactionType === "OTHER_INCOME") &&
+      e.debitCredit === "CREDIT";
+
+    const isDebit =
       (e.transactionType === "OWNER_TAKEN" ||
         e.transactionType === "OFFICE_EXPENSE" ||
         e.transactionType === "OTHER_EXPENSE") &&
-      e.debitCredit === "DEBIT"
-    ) {
-      periodBalance -= e.amount;
+      e.debitCredit === "DEBIT";
+
+    const isInPeriod =
+      year &&
+      (!month || month === "allmonths"
+        ? e.transactionDate.getFullYear() === Number(year)
+        : e.transactionDate >= new Date(year, parseInt(month, 10) - 1, 1));
+
+    if (isCredit) {
+      isInPeriod ? (periodBalance += e.amount) : (openingBalance += e.amount);
+    } else if (isDebit) {
+      isInPeriod ? (periodBalance -= e.amount) : (openingBalance -= e.amount);
     }
   });
 

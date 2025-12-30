@@ -4,6 +4,7 @@ import {
   deleteBatch,
   getBatches,
   getBatchesReport,
+  getBatchStats,
   updateBatch,
 } from "../controllers/batchController.js";
 import { jwtMiddleware } from "../middlewares/jwtMiddleware.js";
@@ -14,6 +15,9 @@ router.post("/add-batch", jwtMiddleware, addBatch);
 
 //get batches
 router.get("/get-batches", getBatches);
+
+//get batches stats
+router.get('/get-batches/stats',getBatchStats)
 
 //update batch
 router.put("/update-batch/:id", jwtMiddleware, updateBatch);

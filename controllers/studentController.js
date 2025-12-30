@@ -246,7 +246,6 @@ export const getStudents = TryCatch(async (req, res) => {
     if (!student) {
       return sendResponse(res, 404, false, "Student not found", null);
     }
-    await setRedisCache(redisKey, student, 3600); // cache student data
     return sendResponse(
       res,
       200,
@@ -423,80 +422,19 @@ export const getStudents = TryCatch(async (req, res) => {
       },
       fees: {
         select: {
-          id: true,
-          totalCourseFee: true,
-          finalFee: true,
-          discountAmount: true,
-          balanceAmount: true,
-          feePaymentMode: true,
-          batch: true,
+          status: true,
           batchHistoryFrom: {
             select: {
-              id: true,
-              transferId: true,
-              changeDate: true,
-              reason: true,
-              fromBatch: {
-                select: {
-                  id: true,
-                  name: true,
-                  year: true,
-                  status: true,
-                  course: true,
-                },
-              },
-              toBatch: {
-                select: {
-                  id: true,
-                  name: true,
-                  year: true,
-                  status: true,
-                  course: true,
-                },
-              },
+              fromBatch: { select: { name: true } },
             },
           },
           batchHistoryTo: {
             select: {
-              id: true,
-              transferId: true,
-              changeDate: true,
-              reason: true,
-              fromBatch: {
-                select: {
-                  id: true,
-                  name: true,
-                  year: true,
-                  status: true,
-                  course: true,
-                },
-              },
-              toBatch: {
-                select: {
-                  id: true,
-                  name: true,
-                  year: true,
-                  status: true,
-                  course: true,
-                },
-              },
+              fromBatch: { select: { name: true } },
             },
           },
-          status: true,
         },
         orderBy: { createdAt: "desc" },
-      },
-      payments: {
-        select: {
-          id: true,
-          amount: true,
-          mode: true,
-          transactionId: true,
-          note: true,
-          dueDate: true,
-          paidAt: true,
-          status: true,
-        },
       },
     },
     skip,
