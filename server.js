@@ -26,9 +26,10 @@ app.use(cookieParser());
 
 // CORS setup (local + production)
 const allowedOrigins = [
-  "https://stockfrontend-beryl.vercel.app",
+  "https://smk-web.vercel.app",
   "http://localhost:3000",
 ];
+console.log(process.env.DATABASE_URL);
 
 app.use(
   cors({
