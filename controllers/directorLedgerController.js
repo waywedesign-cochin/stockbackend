@@ -26,18 +26,39 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
+  // Validate director
+  if (!directorId)
+    return sendResponse(res, 400, false, "Director ID is required");
+  const director = await prisma.user.findUnique({
+    where: { id: directorId },
+  });
 
-  if (transactionType === "INSTITUTION_GAVE_BANK" && bankAccountId) {
+  if (!director) {
+    return sendResponse(res, 400, false, "Invalid director selected");
+  }
+
+  // Validate bank account if transaction type is INSTITUTION_GAVE_BANK
+  if (transactionType === "INSTITUTION_GAVE_BANK") {
+    if (!bankAccountId) {
+      return sendResponse(res, 400, false, "Bank account is required");
+    }
+
     const bankAccount = await prisma.bankAccount.findUnique({
       where: { id: bankAccountId },
     });
-    if (bankAccount.balance < amount)
+
+    if (!bankAccount) {
+      return sendResponse(res, 400, false, "Invalid bank account selected");
+    }
+
+    if (bankAccount.balance < amount) {
       return sendResponse(
         res,
         400,
         false,
         "Insufficient balance in bank account"
       );
+    }
   }
 
   // to track if fee completed
@@ -123,45 +144,45 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         updatedFeeId = updatedFee.id;
       }
     }
+    if (transactionType === "INSTITUTION_GAVE_BANK") {
+      //create bank transaction for payment to director
+      const bankTransaction = await tx.bankTransaction.create({
+        data: {
+          amount,
+          transactionId: referenceId || null,
+          transactionDate: transactionDate,
+          transactionMode: "INTERNAL_TRANSFER",
+          transactionType: "DEBIT",
+          category: "PAYMENT_TO_DIRECTOR",
+          description: description || "Payment to director",
+          location: {
+            connect: { id: userLocationId },
+          },
+          director: {
+            connect: { id: directorId },
+          },
+          bankAccount: {
+            connect: { id: bankAccountId },
+          },
+          status: "COMPLETED",
+        },
+      });
+      await tx.directorLedger.update({
+        where: { id: newEntry.id },
+        data: {
+          bankTransactionId: bankTransaction.id,
+        },
+      });
 
-    //create bank transaction for payment to director
-    const bankTransaction = await tx.bankTransaction.create({
-      data: {
-        amount,
-        transactionId: referenceId || null,
-        transactionDate: transactionDate,
-        transactionMode: "INTERNAL_TRANSFER",
-        transactionType: "DEBIT",
-        category: "PAYMENT_TO_DIRECTOR",
-        description: description || "Payment to director",
-        location: {
-          connect: { id: userLocationId },
+      await tx.bankAccount.update({
+        where: { id: bankAccountId },
+        data: {
+          balance: {
+            decrement: amount,
+          },
         },
-        director: {
-          connect: { id: directorId },
-        },
-        bankAccount: {
-          connect: { id: bankAccountId },
-        },
-        status: "COMPLETED",
-      },
-    });
-    await tx.directorLedger.update({
-      where: { id: newEntry.id },
-      data: {
-        bankTransactionId: bankTransaction.id,
-      },
-    });
-
-    await tx.bankAccount.update({
-      where: { id: bankAccountId },
-      data: {
-        balance: {
-          decrement: amount,
-        },
-      },
-    });
-
+      });
+    }
     return newEntry;
   });
   // final response

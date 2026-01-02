@@ -4,8 +4,7 @@ import prisma from "../config/prismaClient.js";
 
 //add bank account
 export const addBankAccount = TryCatch(async (req, res) => {
-  const { accountName, accountNumber, bankName, ifscCode, branch } =
-    req.body;
+  const { accountName, accountNumber, bankName, ifscCode, branch } = req.body;
   const bankAccount = await prisma.bankAccount.create({
     data: {
       accountName,
@@ -21,6 +20,16 @@ export const addBankAccount = TryCatch(async (req, res) => {
 //get bank accounts
 export const getBankAccounts = TryCatch(async (req, res) => {
   const bankAccounts = await prisma.bankAccount.findMany({
+    include: {
+      bankTransactions: {
+        select: {
+          id: true,
+          amount: true,
+          transactionType: true,
+          createdAt: true,
+        },
+      },
+    },
     orderBy: {
       createdAt: "desc",
     },
@@ -37,8 +46,7 @@ export const getBankAccounts = TryCatch(async (req, res) => {
 //update bank account
 export const updateBankAccount = TryCatch(async (req, res) => {
   const { id } = req.params;
-  const { accountName, accountNumber, bankName, ifscCode, branch } =
-    req.body;
+  const { accountName, accountNumber, bankName, ifscCode, branch } = req.body;
 
   const existingBankAccount = await prisma.bankAccount.findUnique({
     where: { id },
