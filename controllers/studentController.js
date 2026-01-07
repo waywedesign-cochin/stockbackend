@@ -127,20 +127,6 @@ export const getStudents = TryCatch(async (req, res) => {
   const skip = limit === 0 ? undefined : (page - 1) * limit;
   const take = limit === 0 ? undefined : limit;
 
-  //redis cache
-  const redisKey = `students:${JSON.stringify(req.query)}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Students fetched (cached)",
-      cachedResponse
-    );
-  }
-
   // single student by ID
   if (id) {
     const student = await prisma.student.findUnique({
@@ -254,7 +240,26 @@ export const getStudents = TryCatch(async (req, res) => {
       student
     );
   }
+  //redis cache
+  const sortedQuery = Object.keys(req.query)
+    .sort()
+    .reduce((acc, key) => {
+      acc[key] = req.query[key];
+      return acc;
+    }, {});
 
+  const redisKey = `students:${JSON.stringify(sortedQuery)}`;
+  const cachedResponse = await getRedisCache(redisKey);
+  if (cachedResponse) {
+    console.log("📦 Serving from Redis Cache");
+    return sendResponse(
+      res,
+      200,
+      true,
+      "Students fetched (cached)",
+      cachedResponse
+    );
+  }
   // filters
   const where = {};
 
@@ -451,9 +456,9 @@ export const getStudents = TryCatch(async (req, res) => {
       totalPages,
     },
   };
-
-  await setRedisCache(redisKey, responseData);
-
+  if (students.length > 0) {
+    await setRedisCache(redisKey, responseData);
+  }
   return sendResponse(
     res,
     200,

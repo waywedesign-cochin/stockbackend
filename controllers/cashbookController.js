@@ -183,12 +183,19 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
 export const getCashbookEntries = TryCatch(async (req, res) => {
   const { locationId, month, year, search, transactionType, page, limit } =
     req.query;
-
+  if (!locationId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "locationId is required" });
+  }
   //redis cache
-  const redisKey = `cashbook:${locationId}:${year || "all"}:${month || "all"}:${
-    transactionType || "all"
-  }:page:${page || 1}:limit:${limit || 10}`;
+  const safeYear = year ? String(year) : "ALL";
+  const safeMonth = month ? String(month) : "ALL";
+  const safeType = transactionType ? String(transactionType) : "ALL";
+  const safePage = Number(page) || 1;
+  const safeLimit = Number(limit) || 10;
 
+  const redisKey = `cashbook:${locationId}:${safeYear}:${safeMonth}:${safeType}:p:${safePage}:l:${safeLimit}`;
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
     console.log("📦 Serving from Redis Cache (Cashbook)");
@@ -199,12 +206,6 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
       "Cashbook entries fetched successfully",
       JSON.parse(cachedResponse)
     );
-  }
-
-  if (!locationId) {
-    return res
-      .status(400)
-      .json({ success: false, message: "locationId is required" });
   }
 
   const pageNumber = parseInt(page) || 1;
@@ -340,7 +341,13 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     },
   };
   //set redis cache
-  await setRedisCache(redisKey, JSON.stringify(responseData));
+  const hasData =
+    entries.length > 0 ||
+    Object.values(responseData.totals).some((v) => Number(v) !== 0);
+
+  if (hasData) {
+    await setRedisCache(redisKey, JSON.stringify(responseData));
+  }
   // ---------- Response ----------
   sendResponse(
     res,

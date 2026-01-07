@@ -239,11 +239,24 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
     page,
     limit,
   } = req.query;
+  if (!directorId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "directorId is required" });
+  }
+
   //redis cache
-  const redisKey = `directorLedger:${JSON.stringify(req.query)}`;
+  const safeYear = year ? String(year) : "ALL";
+  const safeMonth = month ? String(month) : "ALL";
+  const safeType = transactionType ? String(transactionType) : "ALL";
+  const safeDebitCredit = debitCredit ? String(debitCredit) : "ALL";
+  const safePage = Number(page) || 1;
+  const safeLimit = Number(limit) || 10;
+
+  const redisKey = `directorLedger:${directorId}:${safeYear}:${safeMonth}:${safeType}:${safeDebitCredit}:p:${safePage}:l:${safeLimit}`;
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache(Director Ledger)");
+    console.log("📦 Serving from Redis Cache (Director Ledger)");
     return sendResponse(
       res,
       200,
@@ -252,6 +265,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
       JSON.parse(cachedResponse)
     );
   }
+
   const pageNumber = parseInt(page) || 1;
   const pageSize = parseInt(limit) || 10;
   const skip = (pageNumber - 1) * pageSize;
@@ -367,7 +381,13 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   };
 
   //set redis cache
-  await setRedisCache(redisKey, JSON.stringify(responseData));
+  const hasData =
+    entries.length > 0 ||
+    Object.values(responseData.totals).some((v) => Number(v) !== 0);
+
+  if (hasData) {
+    await setRedisCache(redisKey, JSON.stringify(responseData));
+  }
   // ---------- Response ----------
   sendResponse(
     res,
