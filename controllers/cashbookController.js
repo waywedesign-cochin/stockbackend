@@ -253,44 +253,46 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     debitCreditTotals.find((t) => t.debitCredit === "CREDIT")?._sum.amount || 0;
 
   // ---------- Calculate Opening & Period Balance ----------
-  const periodEndDate =
-    month && month !== "allmonths"
-      ? new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999)
-      : new Date(year, 11, 31, 23, 59, 59, 999);
+  const numericYear = Number(year);
+  const numericMonth = month && month !== "ALL" ? Number(month) : null;
 
-  const allEntriesUpToPeriod = await prisma.cashbook.findMany({
+  const periodStartDate = numericMonth
+    ? new Date(numericYear, numericMonth - 1, 1)
+    : new Date(numericYear, 0, 1);
+
+  const periodEndDate = numericMonth
+    ? new Date(numericYear, numericMonth, 0, 23, 59, 59, 999)
+    : new Date(numericYear, 11, 31, 23, 59, 59, 999);
+  const openingEntries = await prisma.cashbook.findMany({
     where: {
       locationId,
-      transactionDate: { lte: periodEndDate },
+      transactionDate: {
+        lt: periodStartDate,
+      },
     },
   });
 
   let openingBalance = 0;
+
+  openingEntries.forEach((e) => {
+    if (e.debitCredit === "CREDIT") openingBalance += e.amount;
+    if (e.debitCredit === "DEBIT") openingBalance -= e.amount;
+  });
+  const periodEntries = await prisma.cashbook.findMany({
+    where: {
+      locationId,
+      transactionDate: {
+        gte: periodStartDate,
+        lte: periodEndDate,
+      },
+    },
+  });
+
   let periodBalance = 0;
 
-  allEntriesUpToPeriod.forEach((e) => {
-    const isCredit =
-      (e.transactionType === "STUDENT_PAID" ||
-        e.transactionType === "OTHER_INCOME") &&
-      e.debitCredit === "CREDIT";
-
-    const isDebit =
-      (e.transactionType === "OWNER_TAKEN" ||
-        e.transactionType === "OFFICE_EXPENSE" ||
-        e.transactionType === "OTHER_EXPENSE") &&
-      e.debitCredit === "DEBIT";
-
-    const isInPeriod =
-      year &&
-      (!month || month === "allmonths"
-        ? e.transactionDate.getFullYear() === Number(year)
-        : e.transactionDate >= new Date(year, parseInt(month, 10) - 1, 1));
-
-    if (isCredit) {
-      isInPeriod ? (periodBalance += e.amount) : (openingBalance += e.amount);
-    } else if (isDebit) {
-      isInPeriod ? (periodBalance -= e.amount) : (openingBalance -= e.amount);
-    }
+  periodEntries.forEach((e) => {
+    if (e.debitCredit === "CREDIT") periodBalance += e.amount;
+    if (e.debitCredit === "DEBIT") periodBalance -= e.amount;
   });
 
   const closingBalance = openingBalance + periodBalance;
