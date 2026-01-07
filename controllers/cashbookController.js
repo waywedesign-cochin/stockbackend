@@ -298,8 +298,17 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
   const closingBalance = openingBalance + periodBalance;
 
   // ---------- Entries (apply transactionType filter only here) ----------
-  const cashbookFilter = { ...periodFilter };
-  if (transactionType) cashbookFilter.transactionType = transactionType;
+  const cashbookFilter = {
+    locationId,
+    transactionDate: {
+      gte: periodStartDate,
+      lte: periodEndDate,
+    },
+  };
+
+  if (transactionType) {
+    cashbookFilter.transactionType = transactionType;
+  }
 
   const entries = await prisma.cashbook.findMany({
     where: cashbookFilter,
@@ -343,13 +352,8 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     },
   };
   //set redis cache
-  const hasData =
-    entries.length > 0 ||
-    Object.values(responseData.totals).some((v) => Number(v) !== 0);
+  await setRedisCache(redisKey, JSON.stringify(responseData));
 
-  if (hasData) {
-    await setRedisCache(redisKey, JSON.stringify(responseData));
-  }
   // ---------- Response ----------
   sendResponse(
     res,

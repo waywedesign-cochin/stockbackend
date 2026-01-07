@@ -252,8 +252,9 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   const safeDebitCredit = debitCredit ? String(debitCredit) : "ALL";
   const safePage = Number(page) || 1;
   const safeLimit = Number(limit) || 10;
+  const safeSearch = search ? String(search).trim().toLowerCase() : "ALL";
 
-  const redisKey = `directorLedger:${directorId}:${safeYear}:${safeMonth}:${safeType}:${safeDebitCredit}:p:${safePage}:l:${safeLimit}`;
+  const redisKey = `directorLedger:${directorId}:${safeYear}:${safeMonth}:${safeType}:${safeDebitCredit}:${safeSearch}:p:${safePage}:l:${safeLimit}`;
   const cachedResponse = await getRedisCache(redisKey);
   if (cachedResponse) {
     console.log("📦 Serving from Redis Cache (Director Ledger)");
@@ -381,13 +382,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   };
 
   //set redis cache
-  const hasData =
-    entries.length > 0 ||
-    Object.values(responseData.totals).some((v) => Number(v) !== 0);
-
-  if (hasData) {
-    await setRedisCache(redisKey, JSON.stringify(responseData));
-  }
+  await setRedisCache(redisKey, JSON.stringify(responseData));
   // ---------- Response ----------
   sendResponse(
     res,

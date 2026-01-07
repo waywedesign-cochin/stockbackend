@@ -456,9 +456,9 @@ export const getStudents = TryCatch(async (req, res) => {
       totalPages,
     },
   };
-  if (students.length > 0) {
-    await setRedisCache(redisKey, responseData);
-  }
+
+  await setRedisCache(redisKey, responseData);
+
   return sendResponse(
     res,
     200,
