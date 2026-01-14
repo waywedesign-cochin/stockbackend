@@ -80,49 +80,62 @@ export const getBankTransactions = TryCatch(async (req, res) => {
   const pageSize = parseInt(limit) || 10;
   const skip = (pageNumber - 1) * pageSize;
 
-  const periodFilter = { locationId };
-  if (year) {
-    if (month && month !== "ALL") {
-      periodFilter.transactionDate = {
-        gte: new Date(year, parseInt(month, 10) - 1, 1),
-        lte: new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999),
-      };
-    } else {
-      periodFilter.transactionDate = {
-        gte: new Date(year, 0, 1),
-        lte: new Date(year, 11, 31, 23, 59, 59, 999),
-      };
-    }
+  const periodFilter = {};
+
+  // location
+  if (locationId && locationId !== "ALL") {
+    periodFilter.locationId = locationId;
   }
-  if (transactionMode) periodFilter.transactionMode = transactionMode;
-  if (transactionType) periodFilter.transactionType = transactionType;
-  if (category) periodFilter.category = category;
-  if (bankAccountId) periodFilter.bankAccountId = bankAccountId;
-  if (search) {
+
+  // date (month always sent)
+  if (year) {
+    periodFilter.transactionDate = {
+      gte: new Date(Number(year), Number(month) - 1, 1),
+      lte: new Date(Number(year), Number(month), 0, 23, 59, 59, 999),
+    };
+  }
+
+  // optional filters
+  if (bankAccountId && bankAccountId !== "") {
+    periodFilter.bankAccountId = bankAccountId;
+  }
+
+  if (transactionType && transactionType !== "") {
+    periodFilter.transactionType = transactionType;
+  }
+
+  if (transactionMode && transactionMode !== "") {
+    periodFilter.transactionMode = transactionMode;
+  }
+
+  if (category && category !== "") {
+    periodFilter.category = category;
+  }
+
+  // search
+  if (search && search.trim() !== "") {
     periodFilter.OR = [
       { transactionId: { contains: search, mode: "insensitive" } },
       { description: { contains: search, mode: "insensitive" } },
       { transactionMode: { contains: search, mode: "insensitive" } },
       { category: { contains: search, mode: "insensitive" } },
-      { status: { contains: search, mode: "insensitive" } },
       { transactionType: { contains: search, mode: "insensitive" } },
-      { amount: isNaN(Number(search)) ? undefined : Number(search) },
     ];
   }
-  const filtersForTotal = { locationId };
-  if (year) {
-    if (month && month !== "ALL") {
-      filtersForTotal.transactionDate = {
-        gte: new Date(year, parseInt(month, 10) - 1, 1),
-        lte: new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999),
-      };
-    } else {
-      filtersForTotal.transactionDate = {
-        gte: new Date(year, 0, 1),
-        lte: new Date(year, 11, 31, 23, 59, 59, 999),
-      };
-    }
+
+  const filtersForTotal = {};
+
+  if (locationId && locationId !== "ALL") {
+    filtersForTotal.locationId = locationId;
   }
+
+  if (year) {
+    filtersForTotal.transactionDate = {
+      gte: new Date(Number(year), Number(month) - 1, 1),
+      lte: new Date(Number(year), Number(month), 0, 23, 59, 59, 999),
+    };
+  }
+
   // calculate total debit and credit
   const totalCredit = await prisma.bankTransaction.aggregate({
     where: { ...filtersForTotal, transactionType: "CREDIT" },
