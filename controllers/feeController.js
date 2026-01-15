@@ -117,7 +117,13 @@ export const updateFee = TryCatch(async (req, res) => {
     // if req body has new balanceAmount use that instead of existing balance
     updatedBalance = balanceAmount;
   } else if (feePaymentMode === "fullPayment") {
-    updatedBalance = 0;
+    const payments = await prisma.payment.findMany({
+      where: { feeId: id },
+    });
+    updatedBalance =
+      updatedFinalFee -
+      alreadyPaid -
+      payments.reduce((total, payment) => total + payment.amount, 0);
   } else {
     updatedBalance = updatedFinalFee - alreadyPaid;
   }
@@ -149,7 +155,7 @@ export const updateFee = TryCatch(async (req, res) => {
       advanceAmount: existingFee.advanceAmount || null,
       feePaymentMode,
       status:
-        feePaymentMode === "fullPayment" || updatedBalance === 0
+        feePaymentMode === "fullPayment" && updatedBalance === 0
           ? "PAID"
           : "PENDING",
     },
