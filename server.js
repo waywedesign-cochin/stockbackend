@@ -26,7 +26,7 @@ app.use(cookieParser());
 
 // CORS setup (local + production)
 const allowedOrigins = [
-  "https://app.stockmarketkerala.com",
+  "https://stockfrontend-beryl.vercel.app",
   "http://localhost:3000",
 ];
 
