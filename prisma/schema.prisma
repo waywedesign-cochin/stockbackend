@@ -113,6 +113,7 @@ model Student {
   referralInfo    String?
   currentBatch    Batch   @relation(fields: [currentBatchId], references: [id])
   currentBatchId  String
+  status          String  @default("ACTIVE") // 'ACTIVE', 'INACTIVE', 'REMOVED', 'DROPPED'
 
   fees     Fee[]
   payments Payment[]
@@ -204,6 +205,7 @@ model batchHistory {
   feeIdTo String? @map("fee_id_to")
   feeTo   Fee?    @relation("FeeToBatchHistory", fields: [feeIdTo], references: [id])
 
+  feeManageMode String? // 'TRANSFER' | 'NEW_FEE' | 'SPLIT'
   // Unique transfer ID
   transferId String @default(uuid())
 

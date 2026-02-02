@@ -223,7 +223,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     directorId || null
   );
   //clear redis cache
-  await clearRedisCache("directorLedger:*");
+  //await clearRedisCache("directorLedger:*");
   return sendResponse(res, 200, true, "Entry added successfully", result);
 });
 
@@ -246,26 +246,26 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   }
 
   //redis cache
-  const safeYear = year ? String(year) : "ALL";
-  const safeMonth = month ? String(month) : "ALL";
-  const safeType = transactionType ? String(transactionType) : "ALL";
-  const safeDebitCredit = debitCredit ? String(debitCredit) : "ALL";
-  const safePage = Number(page) || 1;
-  const safeLimit = Number(limit) || 10;
-  const safeSearch = search ? String(search).trim().toLowerCase() : "ALL";
+  // const safeYear = year ? String(year) : "ALL";
+  // const safeMonth = month ? String(month) : "ALL";
+  // const safeType = transactionType ? String(transactionType) : "ALL";
+  // const safeDebitCredit = debitCredit ? String(debitCredit) : "ALL";
+  // const safePage = Number(page) || 1;
+  // const safeLimit = Number(limit) || 10;
+  // const safeSearch = search ? String(search).trim().toLowerCase() : "ALL";
 
-  const redisKey = `directorLedger:${directorId}:${safeYear}:${safeMonth}:${safeType}:${safeDebitCredit}:${safeSearch}:p:${safePage}:l:${safeLimit}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache (Director Ledger)");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Director ledger entries fetched successfully",
-      JSON.parse(cachedResponse)
-    );
-  }
+  // const redisKey = `directorLedger:${directorId}:${safeYear}:${safeMonth}:${safeType}:${safeDebitCredit}:${safeSearch}:p:${safePage}:l:${safeLimit}`;
+  // const cachedResponse = await getRedisCache(redisKey);
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache (Director Ledger)");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Director ledger entries fetched successfully",
+  //     JSON.parse(cachedResponse)
+  //   );
+  // }
 
   const pageNumber = parseInt(page) || 1;
   const pageSize = parseInt(limit) || 10;
@@ -275,7 +275,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   const periodFilter = { directorId };
 
   if (year) {
-    if (month && month !== "allmonths") {
+    if (month && month !== "all-months") {
       periodFilter.transactionDate = {
         gte: new Date(year, parseInt(month, 10) - 1, 1),
         lte: new Date(year, parseInt(month, 10), 0, 23, 59, 59, 999),
@@ -382,7 +382,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
   };
 
   //set redis cache
-  await setRedisCache(redisKey, JSON.stringify(responseData));
+  //await setRedisCache(redisKey, JSON.stringify(responseData));
   // ---------- Response ----------
   sendResponse(
     res,
@@ -561,7 +561,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       existing.directorId || null
     );
     //clear redis cache
-    await clearRedisCache("directorLedger:*");
+    //await clearRedisCache("directorLedger:*");
 
     return sendResponse(
       res,
@@ -758,7 +758,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     existing.directorId || null
   );
   //clear redis cache
-  await clearRedisCache("directorLedger:*");
+  //await clearRedisCache("directorLedger:*");
   sendResponse(res, 200, true, "Entry updated successfully", updatedEntry);
 });
 
@@ -814,7 +814,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
     });
 
     //clear redis cache
-    await clearRedisCache("directorLedger:*");
+   // await clearRedisCache("directorLedger:*");
 
     //create communication log
     await addCommunicationLogEntry(
@@ -875,7 +875,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
   );
 
   //clear redis cache
-  await clearRedisCache("directorLedger:*");
+  //await clearRedisCache("directorLedger:*");
 
   sendResponse(
     res,

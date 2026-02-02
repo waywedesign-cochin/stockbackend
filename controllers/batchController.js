@@ -65,9 +65,9 @@ export const addBatch = TryCatch(async (req, res) => {
     );
 
     //clear redis cache for batches
-    await clearRedisCache("batches:*");
-    await clearRedisCache("batchesReport:*");
-    await clearRedisCache("batchStats:*");
+    // await clearRedisCache("batches:*");
+    // await clearRedisCache("batchesReport:*");
+    // await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch added successfully", batch);
 });
@@ -80,13 +80,10 @@ export const getBatches = TryCatch(async (req, res) => {
   const limit = Number(req.query.limit || 10);
   const skip = (page - 1) * limit;
 
-  if (!location) {
-    return sendResponse(res, 400, false, "Location is required", null);
-  }
-
   // Filters
-  const where = { locationId: location };
+  const where = {};
 
+  if (location) where.locationId = location;
   if (status) where.status = status;
   if (year) where.year = Number(year);
 
@@ -102,6 +99,7 @@ export const getBatches = TryCatch(async (req, res) => {
       { tutor: { contains: search, mode: "insensitive" } },
       { coordinator: { contains: search, mode: "insensitive" } },
       { course: { name: { contains: search, mode: "insensitive" } } },
+      { location: { name: { contains: search, mode: "insensitive" } } },
     ];
   }
 
@@ -127,11 +125,12 @@ export const getBatches = TryCatch(async (req, res) => {
   const fees = await prisma.fee.findMany({
     where: {
       batchId: { in: batchIds },
-      NOT: { status: { in: ["CANCELLED", "INACTIVE", "REFUNDED"] } },
+      NOT: { status: { in: ["CANCELLED", "REFUNDED"] } },
     },
     select: {
       batchId: true,
       finalFee: true,
+      status: true,
       payments: {
         where: { paidAt: { not: null } },
         select: { amount: true },
@@ -144,24 +143,39 @@ export const getBatches = TryCatch(async (req, res) => {
 
   for (const fee of fees) {
     if (!feeMap[fee.batchId]) {
-      feeMap[fee.batchId] = { totalFee: 0, collected: 0 };
+      feeMap[fee.batchId] = {
+        totalFee: 0,
+        collected: 0,
+        historicalCollected: null,
+      };
     }
 
+    const collected = fee.payments.reduce((s, p) => s + (p.amount || 0), 0);
+
+    // SPLIT / closed fees → historical
+    if (["INACTIVE", "PAID"].includes(fee.status)) {
+      feeMap[fee.batchId].historicalCollected += collected;
+      continue;
+    }
+
+    // ACTIVE / PENDING
+    feeMap[fee.batchId].collected += collected;
     feeMap[fee.batchId].totalFee += fee.finalFee || 0;
-    feeMap[fee.batchId].collected += fee.payments.reduce(
-      (sum, p) => sum + (p.amount || 0),
-      0
-    );
   }
 
   // Final batch response
   const enhancedBatches = batches.map((batch) => {
-    const fee = feeMap[batch.id] || { totalFee: 0, collected: 0 };
+    const fee = feeMap[batch.id] || {
+      totalFee: 0,
+      collected: 0,
+      historicalCollected: 0,
+    };
 
     return {
       ...batch,
       totalFee: fee.totalFee,
       collected: fee.collected,
+      historicalCollected: fee.historicalCollected,
       pending: Math.max(fee.totalFee - fee.collected, 0),
       enrollment: `${batch.currentCount}/${batch.slotLimit}`,
       enrollmentPercent: (
@@ -190,13 +204,13 @@ export const getBatchStats = TryCatch(async (req, res) => {
     return sendResponse(res, 400, false, "Location is required", null);
   }
 
-  const redisKey = `batchStats:${location}:${year || "all"}`;
-  const cached = await getRedisCache(redisKey);
+  // const redisKey = `batchStats:${location}:${year || "all"}`;
+  // const cached = await getRedisCache(redisKey);
 
-  if (cached) {
-    console.log("📦 Batch stats from Redis");
-    return sendResponse(res, 200, true, "Batch stats fetched", cached);
-  }
+  // if (cached) {
+  //   console.log("📦 Batch stats from Redis");
+  //   return sendResponse(res, 200, true, "Batch stats fetched", cached);
+  // }
 
   const where = { locationId: location };
   if (year) where.year = Number(year);
@@ -229,12 +243,32 @@ export const getBatchStats = TryCatch(async (req, res) => {
     const fees = batch.students.flatMap((s) => s.fees);
     const payments = batch.students.flatMap((s) => s.payments);
 
-    const batchFee = fees.reduce((s, f) => s + (f.finalFee || 0), 0);
+    const excludedStatuses = ["CANCELLED", "REFUNDED", "INACTIVE"];
+
+    const batchFee = fees
+      .filter((f) => !excludedStatuses.includes(f.status))
+      .reduce((s, f) => s + (f.finalFee || 0), 0);
+
     const collected = payments.reduce((s, p) => s + (p.amount || 0), 0);
 
     totalFees += batchFee;
     totalRevenue += collected;
-    outstandingFees += batchFee - collected;
+    let batchOutstanding = 0;
+
+    for (const fee of fees) {
+      if (["CANCELLED", "REFUNDED"].includes(fee.status)) continue;
+
+      const paid = batch.students
+        .flatMap((s) => s.payments || [])
+        .filter((p) => p.feeId === fee.id)
+        .reduce((s, p) => s + (p.amount || 0), 0);
+
+      if (["PAID", "INACTIVE"].includes(fee.status)) continue;
+
+      batchOutstanding += Math.max((fee.finalFee || 0) - paid, 0);
+    }
+
+    outstandingFees += batchOutstanding;
   }
 
   const stats = {
@@ -246,7 +280,7 @@ export const getBatchStats = TryCatch(async (req, res) => {
     totalFees,
   };
 
-  await setRedisCache(redisKey, stats, 300); // 5 minutes TTL
+  // await setRedisCache(redisKey, stats, 300); // 5 minutes TTL
 
   return sendResponse(res, 200, true, "Batch stats fetched", stats);
 });
@@ -306,9 +340,9 @@ export const updateBatch = TryCatch(async (req, res) => {
       batch.id
     );
     //redis cache clear
-    await clearRedisCache("batches:*");
-    await clearRedisCache("batchesReport:*");
-    await clearRedisCache("batchStats:*");
+    // await clearRedisCache("batches:*");
+    // await clearRedisCache("batchesReport:*");
+    // await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch updated successfully", batch);
 });
@@ -341,9 +375,9 @@ export const deleteBatch = TryCatch(async (req, res) => {
       batch.id
     );
     //redis cache clear
-    await clearRedisCache("batches:*");
-    await clearRedisCache("batchesReport:*");
-    await clearRedisCache("batchStats:*");
+    // await clearRedisCache("batches:*");
+    // await clearRedisCache("batchesReport:*");
+    // await clearRedisCache("batchStats:*");
   }
   sendResponse(res, 200, true, "Batch deleted successfully", null);
 });
@@ -353,18 +387,18 @@ export const getBatchesReport = TryCatch(async (req, res) => {
   const { locationId, year, quarter } = req.query;
 
   //redis cache
-  const redisKey = `batchesReport:${JSON.stringify(req.query)}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Batches report fetched (cached)",
-      cachedResponse
-    );
-  }
+  // const redisKey = `batchesReport:${JSON.stringify(req.query)}`;
+  // const cachedResponse = await getRedisCache(redisKey);
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Batches report fetched (cached)",
+  //     cachedResponse
+  //   );
+  // }
 
   // 🧮 Define quarter months
   const quarterMonths = {
@@ -428,7 +462,7 @@ export const getBatchesReport = TryCatch(async (req, res) => {
   });
 
   //redis cache
-  await setRedisCache(redisKey, batchPerformance);
+  // await setRedisCache(redisKey, batchPerformance);
 
   sendResponse(res, 200, true, "Batch report fetched successfully", {
     batchPerformance,

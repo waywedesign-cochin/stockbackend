@@ -20,6 +20,7 @@ export const addStudent = TryCatch(async (req, res) => {
     isFundedAccount,
     currentBatchId,
     referralInfo,
+    status,
   } = req.body;
   const {
     userId: loggedById,
@@ -38,6 +39,7 @@ export const addStudent = TryCatch(async (req, res) => {
       isFundedAccount,
       currentBatchId,
       referralInfo,
+      status,
     },
     include: {
       currentBatch: {
@@ -266,6 +268,9 @@ export const getStudents = TryCatch(async (req, res) => {
   if (isFundedAccount !== undefined) {
     where.isFundedAccount = isFundedAccount === "true";
   }
+  if (status) {
+    where.status = status;
+  }
   //filter due on current week
   const now = new Date();
   const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, ...
@@ -337,7 +342,7 @@ export const getStudents = TryCatch(async (req, res) => {
       },
 
       // Status filter
-      status && { currentBatch: { status } },
+      // status && { currentBatch: { status } },
       switched === "true"
         ? {
             OR: [
@@ -426,16 +431,25 @@ export const getStudents = TryCatch(async (req, res) => {
         },
       },
       fees: {
-        select: {
-          status: true,
+        include: {
           batchHistoryFrom: {
-            select: {
-              fromBatch: { select: { name: true } },
+            include: {
+              fromBatch: {
+                select: { id: true, name: true },
+              },
+              toBatch: {
+                select: { id: true, name: true },
+              },
             },
           },
           batchHistoryTo: {
-            select: {
-              fromBatch: { select: { name: true } },
+            include: {
+              fromBatch: {
+                select: { id: true, name: true },
+              },
+              toBatch: {
+                select: { id: true, name: true },
+              },
             },
           },
         },
@@ -481,6 +495,7 @@ export const updateStudent = TryCatch(async (req, res) => {
     isFundedAccount,
     currentBatchId,
     referralInfo,
+    status,
   } = req.body;
   const {
     userId: loggedById,
@@ -505,6 +520,7 @@ export const updateStudent = TryCatch(async (req, res) => {
       isFundedAccount,
       currentBatchId,
       referralInfo,
+      status,
     },
     include: {
       currentBatch: {
@@ -513,7 +529,6 @@ export const updateStudent = TryCatch(async (req, res) => {
           name: true,
           year: true,
           status: true,
-          mode: true,
           tutor: true,
           coordinator: true,
           location: true,
@@ -525,6 +540,20 @@ export const updateStudent = TryCatch(async (req, res) => {
 
   //add communication log
   if (student) {
+    if (student.status === "REMOVED") {
+      // Decrement current batch count
+      // await prisma.batch.update({
+      //   where: { id: student.currentBatchId },
+      //   data: { currentCount: { decrement: 1 } },
+      // });
+      // await prisma.fee.updateMany({
+      //   where: { studentId: student.id },
+      //   data: { status: "CANCELLED" },
+      // });
+      await prisma.payment.deleteMany({
+        where: { studentId: student.id, status: "PENDING" },
+      });
+    }
     await addCommunicationLogEntry(
       loggedById,
       "STUDENT_UPDATED",

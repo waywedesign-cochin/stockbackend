@@ -313,38 +313,87 @@ export const editPayment = TryCatch(async (req, res) => {
         await clearRedisCache("directorLedger:*");
       }
 
-      //update bank transaction
-      const bankTransaction = await tx.bankTransaction.update({
-        where: { id: updatedPayment.bankTransactionId },
-        data: {
-          amount,
-          transactionId,
-          transactionDate: paidAt,
-          transactionMode: updatedPayment.mode,
-          transactionType: "CREDIT",
-          category: "STUDENT_PAYMENT",
-          description: note,
-          fee: {
-            connect: { id: updatedFee.id },
+      //create bank transaction
+      if (!updatedPayment.bankTransactionId) {
+        const bankTransaction = await tx.bankTransaction.create({
+          data: {
+            amount,
+            transactionId,
+            transactionDate: paidAt,
+            transactionMode: updatedPayment.mode,
+            transactionType: "CREDIT",
+            category: "STUDENT_PAYMENT",
+            description: note,
+            fee: {
+              connect: { id: updatedFee.id },
+            },
+            location: {
+              connect: { id: userLocationId },
+            },
+            student: {
+              connect: { id: updatedFee.studentId },
+            },
+            bankAccount: {
+              connect: { id: bankAccountId },
+            },
+            status: "COMPLETED",
           },
-          location: {
-            connect: { id: userLocationId },
+        });
+        await tx.payment.update({
+          where: { id: updatedPayment.id },
+          data: {
+            bankTransactionId: bankTransaction.id,
           },
-          student: {
-            connect: { id: updatedFee.studentId },
+        });
+        await prisma.bankAccount.update({
+          where: { id: bankAccountId },
+          data: {
+            balance: {
+              increment: amount,
+            },
           },
-          bankAccount: {
-            connect: { id: bankAccountId },
+        });
+      } else {
+        const bankTransaction = await tx.bankTransaction.update({
+          where: { id: updatedPayment.bankTransactionId },
+          data: {
+            amount,
+            transactionId,
+            transactionDate: paidAt,
+            transactionMode: updatedPayment.mode,
+            transactionType: "CREDIT",
+            category: "STUDENT_PAYMENT",
+            description: note,
+            fee: {
+              connect: { id: updatedFee.id },
+            },
+            location: {
+              connect: { id: userLocationId },
+            },
+            student: {
+              connect: { id: updatedFee.studentId },
+            },
+            bankAccount: {
+              connect: { id: bankAccountId },
+            },
+            status: "COMPLETED",
           },
-          status: "COMPLETED",
-        },
-      });
-      await tx.payment.update({
-        where: { id: updatedPayment.id },
-        data: {
-          bankTransactionId: bankTransaction.id,
-        },
-      });
+        });
+        await tx.payment.update({
+          where: { id: updatedPayment.id },
+          data: {
+            bankTransactionId: bankTransaction.id,
+          },
+        });
+        await prisma.bankAccount.update({
+          where: { id: bankAccountId },
+          data: {
+            balance: {
+              increment: amount,
+            },
+          },
+        });
+      }
 
       // Adjust bank account balance if amount has changed
       const oldAmount = payment.amount;

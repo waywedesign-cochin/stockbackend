@@ -126,7 +126,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       });
     }
     //clear redis cache
-    await clearRedisCache("directorLedger:*");
+  //  await clearRedisCache("directorLedger:*");
     return newEntry;
   });
 
@@ -168,7 +168,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     directorId || null
   );
   //clear redis cache
-  await clearRedisCache("cashbook:*");
+  // await clearRedisCache("cashbook:*");
   // Success response
   return sendResponse(
     res,
@@ -188,25 +188,25 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
       .status(400)
       .json({ success: false, message: "locationId is required" });
   }
-  //redis cache
-  const safeYear = year ? String(year) : "ALL";
-  const safeMonth = month ? String(month) : "ALL";
-  const safeType = transactionType ? String(transactionType) : "ALL";
-  const safePage = Number(page) || 1;
-  const safeLimit = Number(limit) || 10;
+  // //redis cache
+  // const safeYear = year ? String(year) : "ALL";
+  // const safeMonth = month ? String(month) : "ALL";
+  // const safeType = transactionType ? String(transactionType) : "ALL";
+  // const safePage = Number(page) || 1;
+  // const safeLimit = Number(limit) || 10;
 
-  const redisKey = `cashbook:${locationId}:${safeYear}:${safeMonth}:${safeType}:p:${safePage}:l:${safeLimit}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache (Cashbook)");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Cashbook entries fetched successfully",
-      JSON.parse(cachedResponse)
-    );
-  }
+  // const redisKey = `cashbook:${locationId}:${safeYear}:${safeMonth}:${safeType}:p:${safePage}:l:${safeLimit}`;
+  // const cachedResponse = await getRedisCache(redisKey);
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache (Cashbook)");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Cashbook entries fetched successfully",
+  //     JSON.parse(cachedResponse)
+  //   );
+  // }
 
   const pageNumber = parseInt(page) || 1;
   const pageSize = parseInt(limit) || 10;
@@ -352,7 +352,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     },
   };
   //set redis cache
-  await setRedisCache(redisKey, JSON.stringify(responseData));
+  //await setRedisCache(redisKey, JSON.stringify(responseData));
 
   // ---------- Response ----------
   sendResponse(
@@ -533,9 +533,9 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       existing.directorId || null
     );
     //clear redis cache
-    await clearRedisCache("cashbook:*");
-    if (newEntry.transactionType === "OWNER_TAKEN")
-      await clearRedisCache("directorLedger:*");
+  //  await clearRedisCache("cashbook:*");
+    // if (newEntry.transactionType === "OWNER_TAKEN")
+    //   await clearRedisCache("directorLedger:*");
     return sendResponse(
       res,
       200,
@@ -601,8 +601,8 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       directorId || null
     );
     //clear redis cache
-    await clearRedisCache("cashbook:*");
-    await clearRedisCache("directorLedger:*");
+  //  await clearRedisCache("cashbook:*");
+  //  await clearRedisCache("directorLedger:*");
     sendResponse(res, 200, true, "Entry updated successfully", updated);
   }
 
@@ -727,9 +727,9 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
   );
 
   //clear redis cache
-  await clearRedisCache("cashbook:*");
-  if (result.transactionType === "OWNER_TAKEN")
-    await clearRedisCache("directorLedger:*");
+  //await clearRedisCache("cashbook:*");
+  // if (result.transactionType === "OWNER_TAKEN")
+  //   await clearRedisCache("directorLedger:*");
   sendResponse(res, 200, true, "Entry updated successfully", result);
 });
 
@@ -781,7 +781,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     });
 
     // Clear Redis cache
-    await clearRedisCache("cashbook:*");
+  //  await clearRedisCache("cashbook:*");
 
     // Log activity
     await addCommunicationLogEntry(
@@ -807,8 +807,8 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       await tx.cashbook.delete({ where: { id } });
     });
 
-    await clearRedisCache("cashbook:*");
-    await clearRedisCache("directorLedger:*");
+   // await clearRedisCache("cashbook:*");
+    //await clearRedisCache("directorLedger:*");
 
     await addCommunicationLogEntry(
       loggedById,
@@ -829,7 +829,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
   // ================================================================
   await prisma.cashbook.delete({ where: { id } });
 
-  await clearRedisCache("cashbook:*");
+  //await clearRedisCache("cashbook:*");
 
   await addCommunicationLogEntry(
     loggedById,

@@ -36,7 +36,7 @@ export const switchBatch = TryCatch(async (req, res) => {
 
   // Fetch old fee
   const oldFee = await prisma.fee.findFirst({
-    where: { studentId, batchId: fromBatchId },
+    where: { studentId, status: "PENDING" },
     include: { payments: true },
   });
   if (!oldFee)
@@ -46,7 +46,7 @@ export const switchBatch = TryCatch(async (req, res) => {
     oldFee.payments.reduce((sum, p) => sum + p.amount, 0) || 0;
   const transferId = crypto.randomUUID();
 
-  // --- TRANSFER (keep same fee, just update batch) ---
+  // --- TRANSFER (keep same fee, just update batch) revenue stays at the same batch---
   if (feeAction === "TRANSFER") {
     const [updatedFee, batchHistory] = await prisma.$transaction([
       // // Update existing fee record to point to new batch
@@ -72,6 +72,7 @@ export const switchBatch = TryCatch(async (req, res) => {
           transferId,
           feeIdFrom: oldFee.id,
           feeIdTo: oldFee.id, // same fee record
+          feeManageMode: "TRANSFER",
         },
       }),
       prisma.student.update({
@@ -110,11 +111,11 @@ export const switchBatch = TryCatch(async (req, res) => {
     });
   }
 
-  // NEW FEE early switching before batch start date or after 2 or three days from start date
+  // NEW FEE  revenue shift to new batch
   if (feeAction === "NEW_FEE") {
     try {
       const newFeeAmount = Math.max(toBatch.course.baseFee - totalPaidOld, 0);
-  
+
       const { newFee, updatedOldFee, batchHistory } = await prisma.$transaction(
         async (tx) => {
           // 1️⃣ Create new fee
@@ -129,7 +130,7 @@ export const switchBatch = TryCatch(async (req, res) => {
               status: "PENDING",
             },
           });
-  
+
           // 2️⃣ Create batch history (before updating old fee)
           const batchHistory = await tx.batchHistory.create({
             data: {
@@ -141,9 +142,10 @@ export const switchBatch = TryCatch(async (req, res) => {
               transferId,
               feeIdFrom: oldFee.id,
               feeIdTo: newFee.id,
+              feeManageMode: "NEW_FEE",
             },
           });
-  
+
           // 3️⃣ Move old payments to the new fee (instead of cancelling)
           await tx.payment.updateMany({
             where: {
@@ -153,35 +155,35 @@ export const switchBatch = TryCatch(async (req, res) => {
             },
             data: { feeId: newFee.id },
           });
-  
+
           // 4️⃣ Update old fee status to CANCELLED (soft delete)
           const updatedOldFee = await tx.fee.update({
             where: { id: oldFee.id },
             data: { status: "CANCELLED" },
           });
-  
+
           // 5️⃣ Update student's current batch
           await tx.student.update({
             where: { id: studentId },
             data: { currentBatchId: toBatchId },
           });
-  
+
           // 6️⃣ Update batch counts
           await tx.batch.update({
             where: { id: fromBatchId },
             data: { currentCount: { decrement: 1 } },
           });
-  
+
           await tx.batch.update({
             where: { id: toBatchId },
             data: { currentCount: { increment: 1 } },
           });
-  
+
           return { newFee, updatedOldFee, batchHistory };
         },
         { timeout: 15000 }
       );
-  
+
       // 🟩 After successful transaction
       if (batchHistory) {
         await addCommunicationLogEntry(
@@ -194,12 +196,12 @@ export const switchBatch = TryCatch(async (req, res) => {
           userLocationId
         );
       }
-  
+
       // 🧹 Clear Redis cache (outside transaction)
       await clearRedisCache("students:*");
       await clearRedisCache("studentsRevenue:*");
       await clearRedisCache("batches:*");
-  
+
       return sendResponse(res, 200, true, "Batch switched successfully", {
         batchHistory,
         oldFee: updatedOldFee,
@@ -211,11 +213,19 @@ export const switchBatch = TryCatch(async (req, res) => {
       return sendResponse(res, 500, false, "Failed to switch batch", { error });
     }
   }
-  
 
   // --- SPLIT --- keep old fee and create new fee for new batch
   if (feeAction === "SPLIT") {
     try {
+      if (totalPaidOld > toBatch.course.baseFee) {
+        return sendResponse(
+          res,
+          400,
+          false,
+          "Student has paid more than the new batch fee. Please create a new admission.",
+          null
+        );
+      }
       // Adjust new fee based on total paid in old fee
       const adjustedFee = Math.max(toBatch.course.baseFee - totalPaidOld, 0);
 
@@ -234,11 +244,13 @@ export const switchBatch = TryCatch(async (req, res) => {
             },
           });
 
-          // 2️⃣ Update old fee
+          const isPaid =
+            oldFee.balanceAmount === 0 || totalPaidOld >= oldFee.finalFee;
+          //Update old fee status
           const updatedOldFee = await tx.fee.update({
             where: { id: oldFee.id },
             data: {
-              status: oldFee.balanceAmount === 0 ? "PAID" : "INACTIVE",
+              status: isPaid ? "PAID" : "INACTIVE",
               transferId,
             },
           });
@@ -254,6 +266,7 @@ export const switchBatch = TryCatch(async (req, res) => {
               transferId,
               feeIdFrom: oldFee.id,
               feeIdTo: newFee.id,
+              feeManageMode: "SPLIT",
             },
           });
 
@@ -321,4 +334,249 @@ export const switchBatch = TryCatch(async (req, res) => {
   }
 
   return sendResponse(res, 400, false, "Invalid feeAction provided", null);
+});
+
+//edi switch
+export const editBatchSwitch = TryCatch(async (req, res) => {
+  const {
+    studentId,
+    batchHistoryId,
+    newToBatchId,
+    newFeeAction,
+    changeDate,
+    reason,
+  } = req.body;
+
+  const { userId: loggedById, locationId, name: userName } = req.user;
+
+  // 1️⃣ Fetch latest history
+  const latestHistory = await prisma.batchHistory.findFirst({
+    where: { studentId },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (!latestHistory || latestHistory.id !== batchHistoryId)
+    return sendResponse(
+      res,
+      400,
+      false,
+      "Only latest switch can be edited",
+      null
+    );
+
+  const oldFromBatchId = latestHistory.fromBatchId;
+  const oldToBatchId = latestHistory.toBatchId;
+  const oldFeeFrom = latestHistory.feeIdFrom;
+  const oldFeeTo = latestHistory.feeIdTo;
+
+  const student = await prisma.student.findUnique({ where: { id: studentId } });
+
+  const toBatch = await prisma.batch.findUnique({
+    where: { id: newToBatchId },
+    include: { course: true },
+  });
+
+  if (!toBatch)
+    return sendResponse(res, 404, false, "Target batch not found", null);
+  if (toBatch.currentCount >= toBatch.slotLimit)
+    return sendResponse(res, 400, false, "Target batch is full", null);
+
+  const transferId = crypto.randomUUID();
+
+  await prisma.$transaction(async (tx) => {
+    // =====================================================
+    // 🔁 STEP 1: REVERSE PREVIOUS SWITCH
+    // =====================================================
+
+    // restore student batch
+    await tx.student.update({
+      where: { id: studentId },
+      data: { currentBatchId: oldFromBatchId },
+    });
+
+    // restore batch counts
+    await tx.batch.update({
+      where: { id: oldFromBatchId },
+      data: { currentCount: { increment: 1 } },
+    });
+
+    await tx.batch.update({
+      where: { id: oldToBatchId },
+      data: { currentCount: { decrement: 1 } },
+    });
+
+    // reverse fee logic
+    if (oldFeeFrom !== oldFeeTo) {
+      // NEW_FEE or SPLIT
+
+      // move payments back
+      await tx.payment.updateMany({
+        where: {
+          feeId: oldFeeTo,
+          NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+        },
+        data: { feeId: oldFeeFrom },
+      });
+
+      // delete new fee
+      await tx.fee.delete({ where: { id: oldFeeTo } });
+
+      // reactivate old fee
+      await tx.fee.update({
+        where: { id: oldFeeFrom },
+        data: { status: "PENDING" },
+      });
+    }
+
+    // delete history
+    await tx.batchHistory.delete({
+      where: { id: batchHistoryId },
+    });
+
+    const currentStudent = await tx.student.findUnique({
+      where: { id: studentId },
+    });
+
+    // =====================================================
+    // 🔄 STEP 2: APPLY NEW SWITCH
+    // =====================================================
+
+    const activeFee = await tx.fee.findFirst({
+      where: {
+        studentId,
+        status: { in: ["ACTIVE", "PENDING"] },
+      },
+      include: { payments: true },
+    });
+
+    if (!activeFee) throw new Error("Active fee missing");
+
+    const totalPaid = activeFee.payments.reduce((s, p) => s + p.amount, 0) || 0;
+
+    // ---------------- TRANSFER ----------------
+    if (newFeeAction === "TRANSFER") {
+      await tx.batchHistory.create({
+        data: {
+          studentId,
+          fromBatchId: currentStudent.currentBatchId,
+          toBatchId: newToBatchId,
+          changeDate,
+          reason,
+          transferId,
+          feeIdFrom: activeFee.id,
+          feeIdTo: activeFee.id,
+          feeManageMode: "TRANSFER",
+        },
+      });
+    }
+
+    // ---------------- NEW_FEE ----------------
+    if (newFeeAction === "NEW_FEE") {
+      const newFee = await tx.fee.create({
+        data: {
+          studentId,
+          batchId: newToBatchId,
+          totalCourseFee: toBatch.course.baseFee,
+          finalFee: toBatch.course.baseFee,
+          balanceAmount: Math.max(toBatch.course.baseFee - totalPaid, 0),
+          status: "PENDING",
+        },
+      });
+
+      await tx.payment.updateMany({
+        where: { feeId: activeFee.id },
+        data: { feeId: newFee.id },
+      });
+
+      await tx.fee.update({
+        where: { id: activeFee.id },
+        data: { status: "CANCELLED" },
+      });
+
+      await tx.batchHistory.create({
+        data: {
+          studentId,
+          fromBatchId: currentStudent.currentBatchId,
+          toBatchId: newToBatchId,
+          changeDate,
+          reason,
+          transferId,
+          feeIdFrom: activeFee.id,
+          feeIdTo: newFee.id,
+          feeManageMode: "NEW_FEE",
+        },
+      });
+    }
+
+    // ---------------- SPLIT ----------------
+    if (newFeeAction === "SPLIT") {
+      const adjusted = Math.max(toBatch.course.baseFee - totalPaid, 0);
+
+      const newFee = await tx.fee.create({
+        data: {
+          studentId,
+          batchId: newToBatchId,
+          totalCourseFee: toBatch.course.baseFee,
+          finalFee: adjusted,
+          balanceAmount: adjusted,
+          status: "PENDING",
+        },
+      });
+      const isPaid =
+        activeFee.balanceAmount === 0 || totalPaid >= activeFee.finalFee;
+      //Update old fee status
+      await tx.fee.update({
+        where: { id: activeFee.id },
+        data: {
+          status: isPaid ? "PAID" : "INACTIVE",
+        },
+      });
+
+      await tx.batchHistory.create({
+        data: {
+          studentId,
+          fromBatchId: currentStudent.currentBatchId,
+          toBatchId: newToBatchId,
+          changeDate,
+          reason,
+          transferId,
+          feeIdFrom: activeFee.id,
+          feeIdTo: newFee.id,
+          feeManageMode: "SPLIT",
+        },
+      });
+    }
+
+    // update student + batch
+    await tx.student.update({
+      where: { id: studentId },
+      data: { currentBatchId: newToBatchId },
+    });
+
+    await tx.batch.update({
+      where: { id: currentStudent.currentBatchId },
+      data: { currentCount: { decrement: 1 } },
+    });
+
+    await tx.batch.update({
+      where: { id: newToBatchId },
+      data: { currentCount: { increment: 1 } },
+    });
+  });
+
+  await clearRedisCache("students:*");
+  await clearRedisCache("studentsRevenue:*");
+  await clearRedisCache("batches:*");
+
+  await addCommunicationLogEntry(
+    loggedById,
+    "BATCH_SWITCH_EDITED",
+    new Date(),
+    "Batch Switch Edited",
+    `Batch switch edited for ${student.name} by ${userName}`,
+    studentId,
+    locationId
+  );
+
+  return sendResponse(res, 200, true, "Batch switch edited successfully", null);
 });
