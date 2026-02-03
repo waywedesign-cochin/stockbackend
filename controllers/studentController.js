@@ -633,17 +633,17 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
   const { year, quarter, locationId } = req.query;
 
   const redisKey = `studentsRevenue:${year}:${quarter}:${locationId}`;
-  const cachedResponse = await getRedisCache(redisKey);
-  if (cachedResponse) {
-    console.log("📦 Serving from Redis Cache");
-    return sendResponse(
-      res,
-      200,
-      true,
-      "Students revenue fetched (cached)",
-      cachedResponse
-    );
-  }
+  // const cachedResponse = await getRedisCache(redisKey);
+  // if (cachedResponse) {
+  //   console.log("📦 Serving from Redis Cache");
+  //   return sendResponse(
+  //     res,
+  //     200,
+  //     true,
+  //     "Students revenue fetched (cached)",
+  //     cachedResponse
+  //   );
+  // }
 
   const quarterMonths = {
     Q1: [1, 2, 3],
@@ -682,9 +682,9 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     where: {
       ...locationFilter,
       createdAt: dateRange,
-      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE", "PAID", "REFUNDED"] } },
     },
-    select: { finalFee: true, createdAt: true },
+    select: { finalFee: true, createdAt: true, id: true },
   });
 
   // --- Step 2: Fetch all *active* payments (filtered by date, location) ---
@@ -694,7 +694,7 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       createdAt: dateRange,
       NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
-    select: { amount: true, status: true, createdAt: true },
+    select: { amount: true, status: true, createdAt: true, feeId: true },
   });
 
   // --- Step 3: Prepare monthly breakdown ---
@@ -729,7 +729,15 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       .filter((p) => p.status === "PAID")
       .reduce((acc, p) => acc + (p.amount || 0), 0);
 
-    const outstanding = Math.max(revenue - collections, 0);
+    let outstanding = 0;
+
+    for (const fee of fees) {
+      const paid = payments
+        .filter((p) => p.feeId === fee.id && p.status === "PAID")
+        .reduce((s, p) => s + (p.amount || 0), 0);
+
+      outstanding += Math.max((fee.finalFee || 0) - paid, 0);
+    }
 
     return {
       month: monthNames[month - 1],
@@ -745,9 +753,9 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     where: {
       ...locationFilter,
       batch: batchYearFilter,
-      NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
+      NOT: { status: { in: ["CANCELLED", "INACTIVE", "PAID", "REFUNDED"] } },
     },
-    select: { finalFee: true },
+    select: { id: true, finalFee: true },
   });
 
   const allPaymentsNoDate = await prisma.payment.findMany({
@@ -759,7 +767,7 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
       status: "PAID",
       NOT: { status: { in: ["CANCELLED", "INACTIVE"] } },
     },
-    select: { amount: true },
+    select: { amount: true, feeId: true },
   });
 
   const totalStudents = await prisma.student.count({
@@ -783,7 +791,15 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     0
   );
 
-  const outstandingFees = Math.max(totalRevenue - totalCollections, 0);
+  let outstandingFees = 0;
+
+  for (const fee of allFeesNoDate) {
+    const paid = allPaymentsNoDate
+      .filter((p) => p.feeId === fee.id)
+      .reduce((s, p) => s + (p.amount || 0), 0);
+
+    outstandingFees += Math.max((fee.finalFee || 0) - paid, 0);
+  }
 
   const collectionRate =
     totalRevenue > 0
