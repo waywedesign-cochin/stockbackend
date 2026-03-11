@@ -201,7 +201,7 @@ export const getBankTransactions = TryCatch(async (req, res) => {
     skip,
     take: pageSize,
     orderBy: {
-      transactionDate: "desc",
+      createdAt: "desc",
     },
   });
 

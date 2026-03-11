@@ -212,7 +212,7 @@ export const getPayment = TryCatch(async (req, res) => {
       },
     },
     orderBy: {
-      dueDate: "asc",
+      createdAt: "desc",
     },
   });
   sendResponse(res, 200, true, "Payments fetched successfully", payments);
