@@ -306,19 +306,34 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
     _sum: { amount: true },
   });
 
-  // ---------- Total Debit and Credit (Respect month/year) ----------
-  const debitCreditTotals = await prisma.directorLedger.groupBy({
+  // ---------- Balance Till Selected Period (including previous years) ----------
+  let balanceFilter = { directorId };
+
+  if (year && year !== "all-years") {
+    const y = Number(year);
+    const m = month && month !== "all-months" ? Number(month) : null;
+
+    const endDate = m
+      ? new Date(Date.UTC(y, m, 0, 23, 59, 59, 999)) // end of selected month
+      : new Date(Date.UTC(y, 11, 31, 23, 59, 59, 999)); // end of year
+
+    balanceFilter.transactionDate = {
+      lte: endDate,
+    };
+  }
+
+  const balanceTotals = await prisma.directorLedger.groupBy({
     by: ["debitCredit"],
-    where: { ...periodFilter },
+    where: balanceFilter,
     _sum: { amount: true },
   });
 
   const totalDebit =
-    debitCreditTotals.find((t) => t.debitCredit === "DEBIT")?._sum.amount || 0;
-  const totalCredit =
-    debitCreditTotals.find((t) => t.debitCredit === "CREDIT")?._sum.amount || 0;
+    balanceTotals.find((t) => t.debitCredit === "DEBIT")?._sum.amount || 0;
 
-  // ---------- Period Balance ----------
+  const totalCredit =
+    balanceTotals.find((t) => t.debitCredit === "CREDIT")?._sum.amount || 0;
+
   const periodBalance = totalCredit - totalDebit;
 
   // ---------- Entries (apply transactionType filter ONLY here) ----------
