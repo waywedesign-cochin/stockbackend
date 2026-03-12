@@ -599,6 +599,13 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       dueDate,
       note,
     },
+    include:{
+      student:{
+        select:{
+          id:true,
+        }
+      }
+    }
   });
   //create communication log
   if (updatedPayment) {
@@ -608,7 +615,7 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       new Date(),
       "Payment Due Updated",
       `Payment due updated by ${userName}`,
-      studentId || null,
+      updatedPayment.studentId || null,
       userLocationId
     );
   }
