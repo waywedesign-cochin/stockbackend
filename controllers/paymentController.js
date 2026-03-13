@@ -172,7 +172,7 @@ export const createPayment = TryCatch(async (req, res) => {
       "Payment Created",
       `Payment created by ${userName} and slot booking email sent for student ${existingFee.student.name} (${existingFee.student.currentBatch.name})`,
       existingFee.studentId || null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear cache
@@ -314,7 +314,7 @@ export const editPayment = TryCatch(async (req, res) => {
       }
 
       //create bank transaction
-      if (!updatedPayment.bankTransactionId) {
+      if (!updatedPayment.bankTransactionId && updatedPayment.mode !== "CASH") {
         const bankTransaction = await tx.bankTransaction.create({
           data: {
             amount,
@@ -353,7 +353,10 @@ export const editPayment = TryCatch(async (req, res) => {
             },
           },
         });
-      } else {
+      } else if (
+        updatedPayment.bankTransactionId &&
+        updatedPayment.mode !== "CASH"
+      ) {
         const bankTransaction = await tx.bankTransaction.update({
           where: { id: updatedPayment.bankTransactionId },
           data: {
@@ -414,7 +417,7 @@ export const editPayment = TryCatch(async (req, res) => {
       }
 
       return { updatedPayment, updatedFee };
-    }
+    },
   );
 
   //create communication log
@@ -424,7 +427,7 @@ export const editPayment = TryCatch(async (req, res) => {
       try {
         await sendSlotBookingEmail(updatedFee);
         console.log(
-          `Slot booking email sent for student ${updatedFee.student.name}`
+          `Slot booking email sent for student ${updatedFee.student.name}`,
         );
       } catch (err) {
         console.error("Error sending slot booking email:", err);
@@ -461,7 +464,7 @@ export const editPayment = TryCatch(async (req, res) => {
       "Payment Updated",
       `Payment updated by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
       payment.studentId || null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear cache
@@ -502,7 +505,7 @@ export const deletePayment = TryCatch(async (req, res) => {
     "Payment Deleted",
     `Payment deleted by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
     payment.studentId || null,
-    userLocationId
+    userLocationId,
   );
   //clear cache
   await clearRedisCache("students:*");
@@ -562,7 +565,7 @@ export const createPaymentDue = TryCatch(async (req, res) => {
       "Payment Due Created",
       `Payment due created by ${userName} for ${existingFee.student.name} (${existingFee.student.currentBatch.name})`,
       payment.studentId || null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear cache
@@ -575,7 +578,7 @@ export const createPaymentDue = TryCatch(async (req, res) => {
     200,
     true,
     "Payment due created successfully",
-    payment
+    payment,
   );
 });
 
@@ -599,13 +602,13 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       dueDate,
       note,
     },
-    include:{
-      student:{
-        select:{
-          id:true,
-        }
-      }
-    }
+    include: {
+      student: {
+        select: {
+          id: true,
+        },
+      },
+    },
   });
   //create communication log
   if (updatedPayment) {
@@ -616,7 +619,7 @@ export const editPaymentDue = TryCatch(async (req, res) => {
       "Payment Due Updated",
       `Payment due updated by ${userName}`,
       updatedPayment.studentId || null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear cache
@@ -629,7 +632,7 @@ export const editPaymentDue = TryCatch(async (req, res) => {
     200,
     true,
     "Payment due updated successfully",
-    updatedPayment
+    updatedPayment,
   );
 });
 
@@ -680,7 +683,7 @@ export const getPaymentTypeReport = TryCatch(async (req, res) => {
     ([name, value]) => ({
       name, // e.g. "Cash", "Card", "UPI"
       value, // Total amount for this mode
-    })
+    }),
   );
 
   return sendResponse(
@@ -688,6 +691,6 @@ export const getPaymentTypeReport = TryCatch(async (req, res) => {
     200,
     true,
     "Payment type report fetched successfully",
-    { paymentTypeReport }
+    { paymentTypeReport },
   );
 });
