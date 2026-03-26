@@ -9,6 +9,8 @@ import {
 } from "../utils/redisCache.js";
 
 //add student
+import { Prisma } from "@prisma/client";
+
 export const addStudent = TryCatch(async (req, res) => {
   const {
     admissionNo,
@@ -27,79 +29,92 @@ export const addStudent = TryCatch(async (req, res) => {
     locationId: userLocationId,
     name: userName,
   } = req.user;
-  // 1️⃣ Create Student
-  const student = await prisma.student.create({
-    data: {
-      admissionNo,
-      name,
-      email,
-      phone,
-      address,
-      salesperson,
-      isFundedAccount,
-      currentBatchId,
-      referralInfo,
-      status,
-    },
-    include: {
-      currentBatch: {
-        select: {
-          id: true,
-          name: true,
-          year: true,
-          status: true,
-          tutor: true,
-          coordinator: true,
-          location: true,
-          course: true,
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Create Student
+      const student = await tx.student.create({
+        data: {
+          admissionNo,
+          name,
+          email,
+          phone,
+          address,
+          salesperson,
+          isFundedAccount,
+          currentBatchId,
+          referralInfo,
+          status,
         },
-      },
-    },
-  });
+        include: {
+          currentBatch: {
+            include: {
+              course: true,
+            },
+          },
+        },
+      });
 
-  if (!student) {
+      // Increment batch count
+      await tx.batch.update({
+        where: { id: student.currentBatchId },
+        data: { currentCount: { increment: 1 } },
+      });
+
+      //  Create Fee
+      const baseFee = student.currentBatch.course?.baseFee || 0;
+
+      const fee = await tx.fee.create({
+        data: {
+          totalCourseFee: baseFee,
+          finalFee: baseFee,
+          discountAmount: 0,
+          balanceAmount: null,
+          feePaymentMode: null,
+          studentId: student.id,
+          batchId: student.currentBatchId,
+        },
+      });
+
+      return { student, fee };
+    });
+
+    //clear redis cache
+    await clearRedisCache("students:*");
+    await clearRedisCache("studentsRevenue:*");
+
+    //add communication log
+    await addCommunicationLogEntry(
+      loggedById,
+      "STUDENT_CREATED",
+      new Date(),
+      "New student added",
+      `Student ${result.student.name} (${result.student.currentBatch.name}) has been added by ${userName}.`,
+      result.student.id,
+      userLocationId,
+      null,
+      result.student.currentBatchId,
+    );
+
+    return sendResponse(res, 200, true, "Student added successfully", result);
+  } catch (error) {
+    // ✅ Unique constraint handling (MOST IMPORTANT)
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return sendResponse(
+        res,
+        400,
+        false,
+        "Admission number already exists",
+        null,
+      );
+    }
+
+    console.error("Add student error:", error);
+
     return sendResponse(res, 500, false, "Failed to add student", null);
   }
-
-  //Increment current batch count
-  await prisma.batch.update({
-    where: { id: student.currentBatchId },
-    data: { currentCount: { increment: 1 } },
-  });
-
-  //Create Fee for this student
-
-  const baseFee = student.currentBatch.course?.baseFee || 0;
-
-  const fee = await prisma.fee.create({
-    data: {
-      totalCourseFee: baseFee,
-      finalFee: baseFee,
-      discountAmount: 0,
-      balanceAmount: null,
-      feePaymentMode: null,
-      studentId: student.id,
-      batchId: student.currentBatchId,
-    },
-    include: {
-      student: {
-        include: {
-          currentBatch: true,
-        },
-      },
-    },
-  });
-  if (!fee) {
-    return sendResponse(res, 500, false, "Failed to add fee", null);
-  }
-
-  //clear redis cache for student and revenue details
-  await clearRedisCache("students:*");
-  await clearRedisCache("studentsRevenue:*");
-  sendResponse(res, 200, true, "Student added and fee created successfully", {
-    student,
-    fee,
-  });
 });
 
 //get student by filters
@@ -239,7 +254,7 @@ export const getStudents = TryCatch(async (req, res) => {
       200,
       true,
       "Student fetched successfully",
-      student
+      student,
     );
   }
   //redis cache
@@ -259,7 +274,7 @@ export const getStudents = TryCatch(async (req, res) => {
       200,
       true,
       "Students fetched (cached)",
-      cachedResponse
+      cachedResponse,
     );
   }
   // filters
@@ -351,13 +366,13 @@ export const getStudents = TryCatch(async (req, res) => {
             ],
           }
         : switched === "false"
-        ? {
-            AND: [
-              { fees: { none: { batchHistoryFrom: { some: {} } } } },
-              { fees: { none: { batchHistoryTo: { some: {} } } } },
-            ],
-          }
-        : undefined,
+          ? {
+              AND: [
+                { fees: { none: { batchHistoryFrom: { some: {} } } } },
+                { fees: { none: { batchHistoryTo: { some: {} } } } },
+              ],
+            }
+          : undefined,
       (year || month) && {
         createdAt: {
           gte: month ? new Date(year, month - 1, 1) : new Date(year, 0, 1),
@@ -478,7 +493,7 @@ export const getStudents = TryCatch(async (req, res) => {
     200,
     true,
     "Students fetched successfully",
-    responseData
+    responseData,
   );
 });
 
@@ -561,7 +576,7 @@ export const updateStudent = TryCatch(async (req, res) => {
       "Student updated",
       `Student ${student.name} (${existingStudent.currentBatch.name}) details has been updated by ${userName}.`,
       null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear redis cache for student and revenue details
@@ -619,7 +634,7 @@ export const deleteStudent = TryCatch(async (req, res) => {
       "Student deleted",
       `Student ${result.name} (${result.currentBatch.name}) has been deleted by ${userName}.`,
       null,
-      userLocationId
+      userLocationId,
     );
   }
   //clear redis cache for student and revenue details
@@ -715,10 +730,10 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const monthlyData = months.map((month) => {
     const fees = allFees.filter(
-      (f) => new Date(f.createdAt).getMonth() + 1 === month
+      (f) => new Date(f.createdAt).getMonth() + 1 === month,
     );
     const payments = allPayments.filter(
-      (p) => new Date(p.createdAt).getMonth() + 1 === month
+      (p) => new Date(p.createdAt).getMonth() + 1 === month,
     );
 
     // total expected (active) fee in this month
@@ -783,12 +798,12 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const totalRevenue = allFeesNoDate.reduce(
     (acc, f) => acc + (f.finalFee || 0),
-    0
+    0,
   );
 
   const totalCollections = allPaymentsNoDate.reduce(
     (acc, p) => acc + (p.amount || 0),
-    0
+    0,
   );
 
   let outstandingFees = 0;
@@ -846,12 +861,12 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
 
   const currentRevenue = currentMonthFees.reduce(
     (acc, f) => acc + (f.finalFee || 0),
-    0
+    0,
   );
 
   const prevRevenue = prevMonthFees.reduce(
     (acc, f) => acc + (f.finalFee || 0),
-    0
+    0,
   );
 
   // Correct growth logic
@@ -905,6 +920,6 @@ export const getStudentsRevenue = TryCatch(async (req, res) => {
     200,
     true,
     "Students revenue summary fetched",
-    responseData
+    responseData,
   );
 });
