@@ -314,7 +314,7 @@ export const editPayment = TryCatch(async (req, res) => {
       }
 
       //create bank transaction
-      if (!updatedPayment.bankTransactionId && updatedPayment.mode !== "CASH") {
+      if (!updatedPayment.bankTransactionId && updatedPayment.mode !== "CASH" && updatedPayment.mode !== "DIRECTOR") {
         const bankTransaction = await tx.bankTransaction.create({
           data: {
             amount,
@@ -355,7 +355,8 @@ export const editPayment = TryCatch(async (req, res) => {
         });
       } else if (
         updatedPayment.bankTransactionId &&
-        updatedPayment.mode !== "CASH"
+        updatedPayment.mode !== "CASH"||
+        updatedPayment.mode !== "DIRECTOR"
       ) {
         const bankTransaction = await tx.bankTransaction.update({
           where: { id: updatedPayment.bankTransactionId },
