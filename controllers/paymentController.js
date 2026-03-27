@@ -231,6 +231,7 @@ export const editPayment = TryCatch(async (req, res) => {
     isAdvance,
     bankAccountId,
   } = req.body;
+
   const {
     userId: loggedById,
     locationId: userLocationId,
@@ -242,12 +243,17 @@ export const editPayment = TryCatch(async (req, res) => {
     include: { fee: true, student: { include: { currentBatch: true } } },
   });
 
-  if (!payment) return sendResponse(res, 404, false, "Payment not found", null);
+  if (!payment) {
+    return sendResponse(res, 404, false, "Payment not found", null);
+  }
 
-  const { updatedPayment, updatedFee } = await prisma.$transaction(
+  let updatedPayment, updatedFee;
+
+  // TRANSACTION STARTS - ALL DB OPERATIONS INSIDE
+  const result = await prisma.$transaction(
     async (tx) => {
-      // Update Payment
-      const updatedPayment = await tx.payment.update({
+      // 1. Update payment
+      updatedPayment = await tx.payment.update({
         where: { id: paymentId },
         data: {
           amount,
@@ -260,19 +266,23 @@ export const editPayment = TryCatch(async (req, res) => {
         },
       });
 
-      // Recalculate Fee balance
+      // 2. Aggregate payments
       const totalPaid = await tx.payment.aggregate({
         where: { feeId: payment.feeId, status: "PAID" },
         _sum: { amount: true },
       });
 
-      const newBalance =
-        (payment.fee.finalFee || 0) - (totalPaid._sum.amount || 0);
-
-      const updatedFee = await tx.fee.update({
+      const newBalance = Math.max(
+        (payment.fee.finalFee || 0) - (totalPaid._sum.amount || 0),
+        0,
+      );
+      // 3. Update fee
+      updatedFee = await tx.fee.update({
         where: { id: payment.feeId },
         include: {
-          student: { include: { currentBatch: { include: { course: true } } } },
+          student: {
+            include: { currentBatch: { include: { course: true } } },
+          },
         },
         data: {
           balanceAmount: newBalance,
@@ -281,11 +291,12 @@ export const editPayment = TryCatch(async (req, res) => {
         },
       });
 
-      if (payment.cashbookId && payment.mode === "CASH") {
+      // 4. CASHBOOK
+      if (payment.cashbookId && mode === "CASH") {
         await tx.cashbook.update({
           where: { id: payment.cashbookId },
           data: {
-            amount: amount,
+            amount,
             transactionDate: paidAt,
             transactionType: "STUDENT_PAID",
             debitCredit: "CREDIT",
@@ -293,14 +304,14 @@ export const editPayment = TryCatch(async (req, res) => {
             referenceId: transactionId,
           },
         });
-        //clear cashbook cache
-        await clearRedisCache("cashbook:*");
       }
-      if (payment.directorLedgerId && payment.mode === "DIRECTOR") {
+
+      // 5. DIRECTOR LEDGER
+      if (payment.directorLedgerId && mode === "DIRECTOR") {
         await tx.directorLedger.update({
           where: { id: payment.directorLedgerId },
           data: {
-            amount: amount,
+            amount,
             transactionDate: paidAt,
             transactionType: "STUDENT_PAID",
             debitCredit: "CREDIT",
@@ -308,172 +319,136 @@ export const editPayment = TryCatch(async (req, res) => {
             referenceId: transactionId,
           },
         });
-
-        //clear director ledger cache
-        await clearRedisCache("directorLedger:*");
       }
 
-      //create bank transaction
-      if (!updatedPayment.bankTransactionId && updatedPayment.mode !== "CASH" && updatedPayment.mode !== "DIRECTOR") {
-        const bankTransaction = await tx.bankTransaction.create({
-          data: {
-            amount,
-            transactionId,
-            transactionDate: paidAt,
-            transactionMode: updatedPayment.mode,
-            transactionType: "CREDIT",
-            category: "STUDENT_PAYMENT",
-            description: note,
-            fee: {
-              connect: { id: updatedFee.id },
-            },
-            location: {
-              connect: { id: userLocationId },
-            },
-            student: {
-              connect: { id: updatedFee.studentId },
-            },
-            bankAccount: {
-              connect: { id: bankAccountId },
-            },
-            status: "COMPLETED",
-          },
-        });
-        await tx.payment.update({
-          where: { id: updatedPayment.id },
-          data: {
-            bankTransactionId: bankTransaction.id,
-          },
-        });
-        await prisma.bankAccount.update({
-          where: { id: bankAccountId },
-          data: {
-            balance: {
-              increment: amount,
-            },
-          },
-        });
-      } else if (
-        updatedPayment.bankTransactionId &&
-        updatedPayment.mode !== "CASH"||
-        updatedPayment.mode !== "DIRECTOR"
-      ) {
-        const bankTransaction = await tx.bankTransaction.update({
-          where: { id: updatedPayment.bankTransactionId },
-          data: {
-            amount,
-            transactionId,
-            transactionDate: paidAt,
-            transactionMode: updatedPayment.mode,
-            transactionType: "CREDIT",
-            category: "STUDENT_PAYMENT",
-            description: note,
-            fee: {
-              connect: { id: updatedFee.id },
-            },
-            location: {
-              connect: { id: userLocationId },
-            },
-            student: {
-              connect: { id: updatedFee.studentId },
-            },
-            bankAccount: {
-              connect: { id: bankAccountId },
-            },
-            status: "COMPLETED",
-          },
-        });
-        await tx.payment.update({
-          where: { id: updatedPayment.id },
-          data: {
-            bankTransactionId: bankTransaction.id,
-          },
-        });
-        await prisma.bankAccount.update({
-          where: { id: bankAccountId },
-          data: {
-            balance: {
-              increment: amount,
-            },
-          },
-        });
-      }
+      // 6. BANK TRANSACTION (FIXED LOGIC)
+      if (mode !== "CASH" && mode !== "DIRECTOR" && bankAccountId) {
+        let bankTransactionId = updatedPayment.bankTransactionId;
 
-      // Adjust bank account balance if amount has changed
-      const oldAmount = payment.amount;
-      const newAmount = updatedPayment.amount;
+        if (!bankTransactionId) {
+          const bankTransaction = await tx.bankTransaction.create({
+            data: {
+              amount,
+              transactionId,
+              transactionDate: paidAt,
+              transactionMode: mode,
+              transactionType: "CREDIT",
+              category: "STUDENT_PAYMENT",
+              description: note,
+              fee: { connect: { id: updatedFee.id } },
+              location: { connect: { id: userLocationId } },
+              student: { connect: { id: updatedFee.studentId } },
+              bankAccount: { connect: { id: bankAccountId } },
+              status: "COMPLETED",
+            },
+          });
 
-      const difference = newAmount - oldAmount;
+          bankTransactionId = bankTransaction.id;
+        } else {
+          await tx.bankTransaction.update({
+            where: { id: bankTransactionId },
+            data: {
+              amount,
+              transactionId,
+              transactionDate: paidAt,
+              transactionMode: mode,
+              transactionType: "CREDIT",
+              category: "STUDENT_PAYMENT",
+              description: note,
+              fee: { connect: { id: updatedFee.id } },
+              location: { connect: { id: userLocationId } },
+              student: { connect: { id: updatedFee.studentId } },
+              bankAccount: { connect: { id: bankAccountId } },
+              status: "COMPLETED",
+            },
+          });
+        }
 
-      if (difference !== 0) {
-        await tx.bankAccount.update({
-          where: { id: bankAccountId },
-          data: {
-            balance:
-              difference > 0
-                ? { increment: difference }
-                : { decrement: Math.abs(difference) },
-          },
-        });
+        // attach bankTransactionId to payment
+        if (bankTransactionId !== updatedPayment.bankTransactionId) {
+          await tx.payment.update({
+            where: { id: updatedPayment.id },
+            data: { bankTransactionId },
+          });
+        }
+
+        // adjust bank account balance
+        const difference = amount - payment.amount;
+
+        if (difference !== 0) {
+          await tx.bankAccount.update({
+            where: { id: bankAccountId },
+            data: {
+              balance:
+                difference > 0
+                  ? { increment: difference }
+                  : { decrement: Math.abs(difference) },
+            },
+          });
+        }
       }
 
       return { updatedPayment, updatedFee };
     },
+    { timeout: 10000 }, // give it up to 10s to complete
   );
 
-  //create communication log
-  if (updatedPayment) {
-    //send slot booking email
+  updatedPayment = result.updatedPayment;
+  updatedFee = result.updatedFee;
+
+  try {
+    // if (mode === "CASH") {
+    //   await clearRedisCache("cashbook:*");
+    // }
+
+    // if (mode === "DIRECTOR") {
+    //   await clearRedisCache("directorLedger:*");
+    // }
+
+    await clearRedisCache("students:*");
+    await clearRedisCache("studentsRevenue:*");
+    await clearRedisCache("batches:*");
+  } catch (err) {
+    console.error("Cache clearing failed:", err);
+  }
+
+  try {
     if (isAdvance) {
-      try {
-        await sendSlotBookingEmail(updatedFee);
-        console.log(
-          `Slot booking email sent for student ${updatedFee.student.name}`,
-        );
-      } catch (err) {
-        console.error("Error sending slot booking email:", err);
-      }
+      await sendSlotBookingEmail(updatedFee);
     }
-    //If fee payment completed sent mail
-    if (updatedFee && updatedFee.status === "PAID") {
+
+    if (updatedFee?.status === "PAID") {
       const latestFee = await prisma.fee.findUnique({
         where: { id: updatedFee.id },
         include: {
           student: {
             include: {
               currentBatch: {
-                include: {
-                  course: true,
-                },
+                include: { course: true },
               },
             },
           },
           payments: true,
         },
       });
-      try {
-        await sendFeeCompletionEmail(latestFee);
-      } catch (err) {
-        console.error("Error sending slot booking email:", err);
-      }
-    }
-    //create communication log
-    await addCommunicationLogEntry(
-      loggedById,
-      "PAYMENT_UPDATED",
-      new Date(),
-      "Payment Updated",
-      `Payment updated by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
-      payment.studentId || null,
-      userLocationId,
-    );
-  }
-  //clear cache
-  await clearRedisCache("students:*");
-  await clearRedisCache("studentsRevenue:*");
-  await clearRedisCache("batches:*");
 
-  sendResponse(res, 200, true, "Payment recorded successfully", {
+      await sendFeeCompletionEmail(latestFee);
+    }
+  } catch (err) {
+    console.error("Email error:", err);
+  }
+
+  await addCommunicationLogEntry(
+    loggedById,
+    "PAYMENT_UPDATED",
+    new Date(),
+    "Payment Updated",
+    `Payment updated by ${userName} for ${payment.student.name} (${payment.student.currentBatch.name})`,
+    payment.studentId || null,
+    userLocationId,
+  );
+
+  return sendResponse(res, 200, true, "Payment recorded successfully", {
     payment: updatedPayment,
     fee: updatedFee,
   });

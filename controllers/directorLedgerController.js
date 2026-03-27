@@ -56,7 +56,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         res,
         400,
         false,
-        "Insufficient balance in bank account"
+        "Insufficient balance in bank account",
       );
     }
   }
@@ -96,7 +96,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
           res,
           400,
           false,
-          "No fee record found for this student"
+          "No fee record found for this student",
         );
         return null;
       }
@@ -106,7 +106,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
         fee.balanceAmount !== null
           ? fee.balanceAmount - amount
           : fee.balanceAmount + fee.finalFee - amount,
-        0
+        0,
       );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
@@ -220,7 +220,7 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
     `A new director ledger entry has been added by ${userName}.`,
     studentId || null,
     userLocationId,
-    directorId || null
+    directorId || null,
   );
   //clear redis cache
   //await clearRedisCache("directorLedger:*");
@@ -365,7 +365,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
     },
     skip,
     take: pageSize,
-    orderBy: { transactionDate: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 
   const totalCount = await prisma.directorLedger.count({ where: dataFilter });
@@ -408,7 +408,7 @@ export const getDirectorLedgerEntries = TryCatch(async (req, res) => {
     200,
     true,
     "Director ledger entries fetched successfully",
-    responseData
+    responseData,
   );
 });
 
@@ -485,7 +485,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
           res,
           400,
           false,
-          "No fee record found for this student"
+          "No fee record found for this student",
         );
         return;
       }
@@ -495,7 +495,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         fee.balanceAmount !== null
           ? fee.balanceAmount - amount
           : fee.balanceAmount + fee.finalFee - amount,
-        0
+        0,
       );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
@@ -577,7 +577,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       `Director ledger entry updated by ${userName}, student changed.`,
       studentId || null,
       userLocationId,
-      existing.directorId || null
+      existing.directorId || null,
     );
     //clear redis cache
     //await clearRedisCache("directorLedger:*");
@@ -587,7 +587,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       200,
       true,
       "Old entry removed and new entry created with updated student",
-      newEntry
+      newEntry,
     );
   }
 
@@ -606,8 +606,8 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
         student: studentId
           ? { connect: { id: studentId } }
           : existing.studentId
-          ? { disconnect: true }
-          : undefined,
+            ? { disconnect: true }
+            : undefined,
       },
     });
 
@@ -705,7 +705,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
       if (fee && oldPayment) {
         const updatedBalance = Math.max(
           fee.balanceAmount + oldPayment.amount - amount,
-          0
+          0,
         );
         const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
         // Update fee
@@ -774,7 +774,7 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
     `Director ledger entry updated by ${userName}.`,
     studentId || null,
     userLocationId,
-    existing.directorId || null
+    existing.directorId || null,
   );
   //clear redis cache
   //await clearRedisCache("directorLedger:*");
@@ -800,7 +800,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       404,
       false,
       "Director ledger entry not found",
-      null
+      null,
     );
 
   // if linked to student, reverse fee and payment
@@ -844,7 +844,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       `Director ledger entry deleted by ${userName}, student changed.`,
       entry.studentId || null,
       userLocationId,
-      entry.directorId || null
+      entry.directorId || null,
     );
 
     return sendResponse(
@@ -852,7 +852,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
       200,
       true,
       "Director ledger entry deleted successfully, fee and payment reversed",
-      null
+      null,
     );
   }
   if (
@@ -890,7 +890,7 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
     "Director ledger entry deleted",
     `Director ledger entry deleted by ${userName}.`,
     null,
-    userLocationId
+    userLocationId,
   );
 
   //clear redis cache
@@ -901,6 +901,6 @@ export const deleteDirectorLedgerEntry = TryCatch(async (req, res) => {
     200,
     true,
     "Director ledger entry deleted successfully",
-    null
+    null,
   );
 });

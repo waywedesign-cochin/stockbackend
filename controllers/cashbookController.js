@@ -72,7 +72,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
         fee.balanceAmount !== null
           ? fee.balanceAmount - amount
           : fee.balanceAmount + fee.finalFee - amount,
-        0
+        0,
       );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
@@ -126,7 +126,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
       });
     }
     //clear redis cache
-  //  await clearRedisCache("directorLedger:*");
+    //  await clearRedisCache("directorLedger:*");
     return newEntry;
   });
 
@@ -165,7 +165,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     `A new cashbook entry has been added by ${userName}.`,
     studentId || null,
     userLocationId,
-    directorId || null
+    directorId || null,
   );
   //clear redis cache
   // await clearRedisCache("cashbook:*");
@@ -175,7 +175,7 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
     201,
     true,
     "Cashbook entry added successfully",
-    result
+    result,
   );
 });
 
@@ -315,7 +315,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     include: { student: { include: { currentBatch: true } }, director: true },
     skip,
     take: pageSize,
-    orderBy: { transactionDate: "desc" },
+    orderBy: { createdAt: "desc" },
   });
 
   const totalCount = await prisma.cashbook.count({ where: cashbookFilter });
@@ -360,7 +360,7 @@ export const getCashbookEntries = TryCatch(async (req, res) => {
     200,
     true,
     "Cashbook entries fetched successfully",
-    responseData
+    responseData,
   );
 });
 
@@ -445,7 +445,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
         fee.balanceAmount === null
           ? fee.balanceAmount + fee.finalFee - amount
           : fee.balanceAmount - amount,
-        0
+        0,
       );
       const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
 
@@ -530,10 +530,10 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       `Cashbook entry updated by ${userName}, student changed.`,
       studentId || null,
       userLocationId,
-      existing.directorId || null
+      existing.directorId || null,
     );
     //clear redis cache
-  //  await clearRedisCache("cashbook:*");
+    //  await clearRedisCache("cashbook:*");
     // if (newEntry.transactionType === "OWNER_TAKEN")
     //   await clearRedisCache("directorLedger:*");
     return sendResponse(
@@ -541,7 +541,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       200,
       true,
       "Student changed and entry updated successfully",
-      newEntry
+      newEntry,
     );
   }
 
@@ -598,11 +598,11 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       `Cashbook entry updated by ${userName}, director changed.`,
       studentId || null,
       userLocationId,
-      directorId || null
+      directorId || null,
     );
     //clear redis cache
-  //  await clearRedisCache("cashbook:*");
-  //  await clearRedisCache("directorLedger:*");
+    //  await clearRedisCache("cashbook:*");
+    //  await clearRedisCache("directorLedger:*");
     sendResponse(res, 200, true, "Entry updated successfully", updated);
   }
 
@@ -640,7 +640,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
       if (fee && oldPayment) {
         const updatedBalance = Math.max(
           fee.balanceAmount + oldPayment.amount - amount,
-          0
+          0,
         );
         const newStatus = updatedBalance <= 0 ? "PAID" : "PENDING";
         //update fee
@@ -723,7 +723,7 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
     `Cashbook entry updated by ${userName}.`,
     studentId || null,
     userLocationId,
-    existing.directorId || null
+    existing.directorId || null,
   );
 
   //clear redis cache
@@ -781,7 +781,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     });
 
     // Clear Redis cache
-  //  await clearRedisCache("cashbook:*");
+    //  await clearRedisCache("cashbook:*");
 
     // Log activity
     await addCommunicationLogEntry(
@@ -792,7 +792,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       `Cashbook entry deleted by ${userName}, fee/payment reversed.`,
       entry.studentId || null,
       userLocationId,
-      null
+      null,
     );
 
     return sendResponse(res, 200, true, "Entry deleted successfully", null);
@@ -807,7 +807,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       await tx.cashbook.delete({ where: { id } });
     });
 
-   // await clearRedisCache("cashbook:*");
+    // await clearRedisCache("cashbook:*");
     //await clearRedisCache("directorLedger:*");
 
     await addCommunicationLogEntry(
@@ -818,7 +818,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
       `Cashbook entry deleted by ${userName}.`,
       null,
       userLocationId,
-      entry.directorId || null
+      entry.directorId || null,
     );
 
     return sendResponse(res, 200, true, "Entry deleted successfully", null);
@@ -839,7 +839,7 @@ export const deleteCashbookEntry = TryCatch(async (req, res) => {
     `Cashbook entry deleted by ${userName}.`,
     entry.studentId || null,
     userLocationId,
-    entry.directorId || null
+    entry.directorId || null,
   );
 
   return sendResponse(res, 200, true, "Entry deleted successfully", null);
