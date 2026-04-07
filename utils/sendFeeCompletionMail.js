@@ -19,15 +19,21 @@ export const sendFeeCompletionEmail = async (fee) => {
   const batchName = batch?.name;
   const totalFee = fee?.finalFee || 0;
   const paidAmount =
-    fee?.payments
-      .filter((payment) => payment.status === "PAID")
-      .reduce((total, payment) => total + payment.amount, 0) || 0;
+    fee?.payments?.reduce(
+      (total, payment) => total + (payment.amount || 0),
+      0,
+    ) || 0;
 
-  const paymentDate = new Date().toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
+  const lastPayment = fee?.payments?.[0];
+
+  const paymentDate = lastPayment?.paidAt
+    ? new Date(lastPayment.paidAt).toLocaleDateString("en-US", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      })
+    : "N/A";
 
   const mailOptions = {
     from: `SK & SL Associate Private Limited <no-reply@${process.env.CLIENT_EMAIL}>`,

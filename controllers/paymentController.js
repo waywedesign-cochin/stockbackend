@@ -155,7 +155,10 @@ export const createPayment = TryCatch(async (req, res) => {
               },
             },
           },
-          payments: true,
+          payments: {
+            where: { status: "PAID" },
+            orderBy: { paidAt: "desc" },
+          },
         },
       });
       try {
@@ -428,7 +431,10 @@ export const editPayment = TryCatch(async (req, res) => {
               },
             },
           },
-          payments: true,
+          payments: {
+            where: { status: "PAID" },
+            orderBy: { paidAt: "desc" },
+          },
         },
       });
 

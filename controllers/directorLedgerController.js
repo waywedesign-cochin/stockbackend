@@ -202,7 +202,10 @@ export const addDirectorLedgerEntry = TryCatch(async (req, res) => {
             },
           },
         },
-        payments: true,
+        payments: {
+          where: { status: "PAID" },
+          orderBy: { paidAt: "desc" },
+        },
       },
     });
     try {
@@ -559,7 +562,10 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
               },
             },
           },
-          payments: true,
+          payments: {
+            where: { status: "PAID" },
+            orderBy: { paidAt: "desc" },
+          },
         },
       });
       try {
@@ -756,7 +762,10 @@ export const updateDirectorLedgerEntry = TryCatch(async (req, res) => {
             },
           },
         },
-        payments: true,
+        payments: {
+          where: { status: "PAID" },
+          orderBy: { paidAt: "desc" },
+        },
       },
     });
     try {

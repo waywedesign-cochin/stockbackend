@@ -147,7 +147,10 @@ export const addCashbookEntry = TryCatch(async (req, res) => {
             },
           },
         },
-        payments: true,
+        payments: {
+          where: { status: "PAID" },
+          orderBy: { paidAt: "desc" },
+        },
       },
     });
     try {
@@ -513,7 +516,10 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
               },
             },
           },
-          payments: true,
+          payments: {
+            where: { status: "PAID" },
+            orderBy: { paidAt: "desc" },
+          },
         },
       });
       try {
@@ -705,7 +711,10 @@ export const updateCashbookEntry = TryCatch(async (req, res) => {
             },
           },
         },
-        payments: true,
+        payments: {
+          where: { status: "PAID" },
+          orderBy: { paidAt: "desc" },
+        },
       },
     });
     try {
